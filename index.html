@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sistema de OS e Caixa - Assistencia Tecnica</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="logo.png.jpeg" alt="Logo da assistencia">
+          <div>
+            <strong>CCN Soluções Tecnologicas</strong>
+            <span>Assistência especializada em Notebook - Celular - Tablet</span>
+            <span>Telefone para contato: 11-2936-2016</span>
+            <span>WhatsApp: 11-94573-0188</span>
+            <span>Nosso horário é de segunda a sexta das 10hrs às 18hrs e aos sábados das 10hrs as 15hrs</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Navegacao principal">
+          <button class="nav-button active" data-view="dashboard" type="button">Painel</button>
+          <button class="nav-button" data-view="orders" type="button">Ordens</button>
+          <button class="nav-button" data-view="cash" type="button">Caixa</button>
+          <button class="nav-button" data-view="settings" type="button">Empresa</button>
+        </nav>
+        <div class="side-panel">
+          <span>Status rapido</span>
+          <strong id="openOrdersCount">0 abertas</strong>
+          <small>Dados salvos neste navegador.</small>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Assistencia tecnica</p>
+            <h1 id="pageTitle">Painel</h1>
+          </div>
+          <div class="top-actions">
+            <button class="icon-button" id="backupButton" type="button" title="Exportar backup">⇩</button>
+            <label class="icon-button file-button" title="Importar backup">
+              ⇧
+              <input id="restoreInput" type="file" accept="application/json">
+            </label>
+            <button class="primary-button" id="newOrderButton" type="button">Nova OS</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboardView">
+          <div class="stats-grid">
+            <article class="metric">
+              <span>OS abertas</span>
+              <strong id="metricOpen">0</strong>
+            </article>
+            <article class="metric">
+              <span>Aguardando retirada</span>
+              <strong id="metricWaiting">0</strong>
+            </article>
+            <article class="metric">
+              <span>Recebido hoje</span>
+              <strong id="metricToday">R$ 0,00</strong>
+            </article>
+            <article class="metric">
+              <span>Saldo do caixa</span>
+              <strong id="metricBalance">R$ 0,00</strong>
+            </article>
+          </div>
+
+          <div class="split-layout">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Ordens recentes</h2>
+                <button class="ghost-button" data-view-link="orders" type="button">Ver todas</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>OS</th>
+                      <th>Cliente</th>
+                      <th>Equipamento</th>
+                      <th>Status</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recentOrdersTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Movimento do caixa</h2>
+                <button class="ghost-button" data-view-link="cash" type="button">Abrir caixa</button>
+              </div>
+              <div id="cashTimeline" class="timeline"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="ordersView">
+          <div class="toolbar">
+            <input id="orderSearch" type="search" placeholder="Buscar por cliente, aparelho, telefone ou OS">
+            <select id="statusFilter">
+              <option value="">Todos os status</option>
+              <option>Entrada</option>
+              <option>Orcamento</option>
+              <option>Aprovado</option>
+              <option>Em reparo</option>
+              <option>Aguardando peca</option>
+              <option>Aguardando retirada</option>
+              <option>Finalizado</option>
+              <option>Cancelado</option>
+            </select>
+          </div>
+          <div class="orders-grid" id="ordersGrid"></div>
+        </section>
+
+        <section class="view" id="cashView">
+          <div class="split-layout cash-layout">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Lancar movimento</h2>
+              </div>
+              <form id="cashForm" class="form-grid">
+                <label>
+                  Tipo
+                  <select id="cashType" required>
+                    <option value="entrada">Entrada</option>
+                    <option value="saida">Saida</option>
+                  </select>
+                </label>
+                <label>
+                  Categoria
+                  <select id="cashCategory" required>
+                    <option>Venda</option>
+                    <option>Manutencao/OS</option>
+                    <option>Despesa</option>
+                  </select>
+                </label>
+                <label id="cashOrderLabel" class="hidden-field wide">
+                  Ordem de servico
+                  <select id="cashOrderSelect">
+                    <option value="">Selecione uma OS</option>
+                  </select>
+                </label>
+                <label id="cashClientLabel" class="wide">
+                  Cliente
+                  <input id="cashClientName" placeholder="Nome do cliente">
+                </label>
+                <label>
+                  Forma
+                  <select id="cashMethod" required>
+                    <option>Dinheiro</option>
+                    <option>Pix</option>
+                    <option>Cartao debito</option>
+                    <option>Cartao credito</option>
+                    <option>Transferencia</option>
+                  </select>
+                </label>
+                <label id="cashPaymentModeLabel" class="hidden-field">
+                  Pagamento
+                  <select id="cashPaymentMode">
+                    <option value="avista">A vista</option>
+                    <option value="parcelado">Parcelado</option>
+                  </select>
+                </label>
+                <label id="cashInstallmentsLabel" class="hidden-field">
+                  Parcelas
+                  <select id="cashInstallments">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="3">3x</option>
+                    <option value="4">4x</option>
+                    <option value="5">5x</option>
+                    <option value="6">6x</option>
+                    <option value="7">7x</option>
+                    <option value="8">8x</option>
+                    <option value="9">9x</option>
+                    <option value="10">10x</option>
+                    <option value="11">11x</option>
+                    <option value="12">12x</option>
+                  </select>
+                </label>
+                <label class="wide">
+                  Descricao
+                  <input id="cashDescription" required placeholder="Ex: venda de carregador, pagamento OS-2026-0001, compra de peca">
+                </label>
+                <label>
+                  Valor
+                  <input id="cashAmount" type="number" min="0.01" step="0.01" required>
+                </label>
+                <label>
+                  Data
+                  <input id="cashDate" type="date" required>
+                </label>
+                <button class="primary-button wide" type="submit">Salvar movimento</button>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Historico</h2>
+                <strong id="cashTotal">R$ 0,00</strong>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Categoria</th>
+                      <th>Cliente</th>
+                      <th>Descricao</th>
+                      <th>Forma</th>
+                      <th>Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cashTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="settingsView">
+          <section class="panel settings-panel">
+            <div class="panel-heading">
+              <h2>Dados da empresa</h2>
+            </div>
+            <form id="companyForm" class="form-grid">
+              <label class="wide">
+                Nome da empresa
+                <input id="companyName" required>
+              </label>
+              <label>
+                Telefone
+                <input id="companyPhone">
+              </label>
+              <label>
+                CNPJ
+                <input id="companyDocument">
+              </label>
+              <label class="wide">
+                Endereco
+                <input id="companyAddress">
+              </label>
+              <label class="wide">
+                Observacoes para impressao
+                <textarea id="companyNotes" rows="3"></textarea>
+              </label>
+              <button class="primary-button wide" type="submit">Salvar empresa</button>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="orderDialog">
+      <form id="orderForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow" id="orderCodeLabel">Nova OS</p>
+            <h2>Ordem de servico</h2>
+          </div>
+          <button class="icon-button" id="closeOrderDialog" value="cancel" type="button" title="Fechar">×</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Cliente
+            <input id="clientName" required>
+          </label>
+          <label>
+            Telefone
+            <input id="clientPhone" required>
+          </label>
+          <label>
+            CPF
+            <input id="clientCpf">
+          </label>
+          <label>
+            Telefone para recado
+            <input id="clientMessagePhone">
+          </label>
+          <label class="wide">
+            Endereco
+            <input id="clientAddress">
+          </label>
+          <label>
+            Tipo
+            <select id="deviceType" required>
+              <option>Computador</option>
+              <option>Notebook</option>
+              <option>Celular</option>
+              <option>Tablet</option>
+              <option>Outro</option>
+            </select>
+          </label>
+          <label>
+            Marca/modelo
+            <input id="deviceModel" required>
+          </label>
+          <label>
+            Serial/IMEI
+            <input id="deviceSerial">
+          </label>
+          <label>
+            Senha/padrao
+            <input id="devicePassword">
+          </label>
+          <label class="wide">
+            Defeito relatado
+            <textarea id="reportedIssue" rows="3" required></textarea>
+          </label>
+          <label class="wide">
+            Diagnostico/servico executado
+            <textarea id="diagnosis" rows="3"></textarea>
+          </label>
+          <label>
+            Status
+            <select id="orderStatus" required>
+              <option>Entrada</option>
+              <option>Orcamento</option>
+              <option>Aprovado</option>
+              <option>Em reparo</option>
+              <option>Aguardando peca</option>
+              <option>Aguardando retirada</option>
+              <option>Finalizado</option>
+              <option>Cancelado</option>
+            </select>
+          </label>
+          <label>
+            Previsao
+            <input id="dueDate" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa">
+          </label>
+          <label>
+            Valor de sinal
+            <input id="depositAmount" type="number" min="0" step="0.01" value="0">
+          </label>
+          <label>
+            Data de entrada
+            <input id="entryDateDisplay" readonly>
+          </label>
+          <label>
+            Garantia
+            <select id="warrantyEnabled">
+              <option value="sim">Sim</option>
+              <option value="nao">Nao</option>
+            </select>
+          </label>
+          <label>
+            Dias de garantia
+            <input id="warrantyDays" type="number" min="0" step="1" value="90">
+          </label>
+          <label>
+            Retirada apos aviso
+            <input id="pickupDays" type="number" min="1" step="1" value="90">
+          </label>
+          <label>
+            Taxa diaria apos prazo
+            <input id="storageFee" type="number" min="0" step="0.01" value="0">
+          </label>
+          <label class="wide">
+            Aviso de retirada
+            <textarea id="pickupNotice" rows="3">O prazo para retirada e de ate 90 dias apos o cliente ser informado que o aparelho esta pronto para retirada, caso o cliente nao retire no tempo combinado e passar esses 90 dias sem entrar em contato, a empresa entrara em contato com o cliente informando que o aparelho sera descartado, vendido, desmontado ou usado para cobrir os custos.</textarea>
+          </label>
+        </div>
+
+        <section class="items-section">
+          <div class="panel-heading">
+            <h3>Itens, pecas e servicos</h3>
+            <button class="ghost-button" id="addItemButton" type="button">Adicionar item</button>
+          </div>
+          <div id="itemsList" class="items-list"></div>
+        </section>
+
+        <div class="dialog-footer">
+          <div class="total-box">
+            <span>Total da OS</span>
+            <strong id="orderTotal">R$ 0,00</strong>
+          </div>
+          <div class="footer-actions">
+            <button class="danger-button" id="deleteOrderButton" type="button">Excluir</button>
+            <button class="ghost-button" id="printOrderButton" type="button">Imprimir</button>
+            <button class="primary-button" id="saveOrderButton" type="submit">Salvar OS</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="itemTemplate">
+      <div class="item-row">
+        <input class="item-description" placeholder="Descricao do item">
+        <input class="item-qty" type="number" min="1" step="1" value="1" aria-label="Quantidade">
+        <input class="item-price" type="number" min="0" step="0.01" value="0" aria-label="Valor">
+        <button class="icon-button remove-item" type="button" title="Remover item">×</button>
+      </div>
+    </template>
+
+    <section id="receiptPrintArea" class="receipt-print" aria-hidden="true"></section>
+
+    <script src="app.js"></script>
+  </body>
+</html>
