@@ -10,13 +10,10 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <img class="brand-logo" src="logo.png.jpeg" alt="Logo da assistencia">
+          <div class="brand-mark">AT</div>
           <div>
-            <strong>CCN Soluções Tecnologicas</strong>
-            <span>Assistência especializada em Notebook - Celular - Tablet</span>
-            <span>Telefone para contato: 11-2936-2016</span>
-            <span>WhatsApp: 11-94573-0188</span>
-            <span>Nosso horário é de segunda a sexta das 10hrs às 18hrs e aos sábados das 10hrs as 15hrs</span>
+            <strong>Assistencia</strong>
+            <span>OS + Caixa</span>
           </div>
         </div>
         <nav class="nav" aria-label="Navegacao principal">
@@ -140,16 +137,6 @@
                     <option>Despesa</option>
                   </select>
                 </label>
-                <label id="cashOrderLabel" class="hidden-field wide">
-                  Ordem de servico
-                  <select id="cashOrderSelect">
-                    <option value="">Selecione uma OS</option>
-                  </select>
-                </label>
-                <label id="cashClientLabel" class="wide">
-                  Cliente
-                  <input id="cashClientName" placeholder="Nome do cliente">
-                </label>
                 <label>
                   Forma
                   <select id="cashMethod" required>
@@ -210,7 +197,6 @@
                     <tr>
                       <th>Data</th>
                       <th>Categoria</th>
-                      <th>Cliente</th>
                       <th>Descricao</th>
                       <th>Forma</th>
                       <th>Valor</th>
@@ -276,18 +262,6 @@
             <input id="clientPhone" required>
           </label>
           <label>
-            CPF
-            <input id="clientCpf">
-          </label>
-          <label>
-            Telefone para recado
-            <input id="clientMessagePhone">
-          </label>
-          <label class="wide">
-            Endereco
-            <input id="clientAddress">
-          </label>
-          <label>
             Tipo
             <select id="deviceType" required>
               <option>Computador</option>
@@ -332,11 +306,7 @@
           </label>
           <label>
             Previsao
-            <input id="dueDate" inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa">
-          </label>
-          <label>
-            Valor de sinal
-            <input id="depositAmount" type="number" min="0" step="0.01" value="0">
+            <input id="dueDate" type="date">
           </label>
           <label>
             Data de entrada
@@ -363,7 +333,8 @@
           </label>
           <label class="wide">
             Aviso de retirada
-            <textarea id="pickupNotice" rows="3">O prazo para retirada e de ate 90 dias apos o cliente ser informado que o aparelho esta pronto para retirada, caso o cliente nao retire no tempo combinado e passar esses 90 dias sem entrar em contato, a empresa entrara em contato com o cliente informando que o aparelho sera descartado, vendido, desmontado ou usado para cobrir os custos.</textarea>
+            <textarea id="pickupNotice" rows="3">O prazo para retirada é de ate 90 dias após o cliente ser informado que o aparelho está pronto para retirada, caso o cliente não retire no tempo combinado e passar esses 90 dias sem entrar em contato, a empresa entrará em contato com o cliente informando que o aparelho será descartado, vendido, desmontado ou usado para cobrir os custos.</textarea>
+            
           </label>
         </div>
 
