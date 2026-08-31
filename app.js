@@ -1,12 +1,20 @@
 const STORAGE_KEY = "assistencia_os_caixa_v1";
+const API_BASE = window.location.protocol === "file:" ? "" : window.location.origin;
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL"
 });
 
-const state = loadState();
+let state = {
+  company: defaultCompany(),
+  orders: [],
+  cash: [],
+  clients: [],
+  products: []
+};
 let editingOrderId = null;
+let editingCashId = null;
 
 const els = {
   pageTitle: document.querySelector("#pageTitle"),
@@ -16,6 +24,8 @@ const els = {
     dashboard: document.querySelector("#dashboardView"),
     orders: document.querySelector("#ordersView"),
     cash: document.querySelector("#cashView"),
+    clients: document.querySelector("#clientsView"),
+    products: document.querySelector("#productsView"),
     settings: document.querySelector("#settingsView")
   },
   openOrdersCount: document.querySelector("#openOrdersCount"),
@@ -35,6 +45,8 @@ const els = {
   cashOrderSelect: document.querySelector("#cashOrderSelect"),
   cashClientLabel: document.querySelector("#cashClientLabel"),
   cashClientName: document.querySelector("#cashClientName"),
+  cashClientCpfLabel: document.querySelector("#cashClientCpfLabel"),
+  cashClientCpf: document.querySelector("#cashClientCpf"),
   cashMethod: document.querySelector("#cashMethod"),
   cashPaymentMode: document.querySelector("#cashPaymentMode"),
   cashInstallments: document.querySelector("#cashInstallments"),
@@ -45,6 +57,8 @@ const els = {
   cashDate: document.querySelector("#cashDate"),
   cashTable: document.querySelector("#cashTable"),
   cashTotal: document.querySelector("#cashTotal"),
+  saveCashButton: document.querySelector("#saveCashButton"),
+  cancelCashEditButton: document.querySelector("#cancelCashEditButton"),
   companyForm: document.querySelector("#companyForm"),
   companyName: document.querySelector("#companyName"),
   companyPhone: document.querySelector("#companyPhone"),
@@ -56,6 +70,7 @@ const els = {
   orderCodeLabel: document.querySelector("#orderCodeLabel"),
   closeOrderDialog: document.querySelector("#closeOrderDialog"),
   newOrderButton: document.querySelector("#newOrderButton"),
+  newOrderButtonToolbar: document.querySelector("#newOrderButtonToolbar"),
   deleteOrderButton: document.querySelector("#deleteOrderButton"),
   printOrderButton: document.querySelector("#printOrderButton"),
   addItemButton: document.querySelector("#addItemButton"),
@@ -64,6 +79,30 @@ const els = {
   orderTotal: document.querySelector("#orderTotal"),
   backupButton: document.querySelector("#backupButton"),
   restoreInput: document.querySelector("#restoreInput"),
+  historyButton: document.querySelector("#historyButton"),
+  historyDialog: document.querySelector("#historyDialog"),
+  closeHistoryDialog: document.querySelector("#closeHistoryDialog"),
+  clientForm: document.querySelector("#clientForm"),
+  clientNameCatalog: document.querySelector("#clientNameCatalog"),
+  clientList: document.querySelector("#clientList"),
+  productForm: document.querySelector("#productForm"),
+  productList: document.querySelector("#productList"),
+  clientNameInput: document.querySelector("#clientNameInput"),
+  clientPhoneInput: document.querySelector("#clientPhoneInput"),
+  clientCpfInput: document.querySelector("#clientCpfInput"),
+  clientAddressInput: document.querySelector("#clientAddressInput"),
+  clientMessagePhoneInput: document.querySelector("#clientMessagePhoneInput"),
+  productNameInput: document.querySelector("#productNameInput"),
+  productCategoryInput: document.querySelector("#productCategoryInput"),
+  productBrandInput: document.querySelector("#productBrandInput"),
+  productPriceInput: document.querySelector("#productPriceInput"),
+  productCodeInput: document.querySelector("#productCodeInput"),
+  productStockInput: document.querySelector("#productStockInput"),
+  historyTabs: document.querySelectorAll(".history-tab"),
+  ordersHistoryTable: document.querySelector("#ordersHistoryTable"),
+  cashHistoryTable: document.querySelector("#cashHistoryTable"),
+  downloadOrdersHistory: document.querySelector("#downloadOrdersHistory"),
+  downloadCashHistory: document.querySelector("#downloadCashHistory"),
   receiptPrintArea: document.querySelector("#receiptPrintArea"),
   clientName: document.querySelector("#clientName"),
   clientPhone: document.querySelector("#clientPhone"),
@@ -89,12 +128,14 @@ const els = {
 
 boot();
 
-function boot() {
+async function boot() {
+  state = await loadState();
   els.cashDate.valueAsDate = new Date();
   bindEvents();
   syncCreditFields();
   syncCashContext();
   fillCompanyForm();
+  setView("dashboard");
   render();
 }
 
@@ -116,17 +157,61 @@ function bindEvents() {
   els.deleteOrderButton.addEventListener("click", deleteCurrentOrder);
   els.printOrderButton.addEventListener("click", printCurrentOrder);
   els.dueDate.addEventListener("input", maskBrazilianDate);
+  els.dueDate.addEventListener("blur", normalizeBrazilianDateInput);
   els.orderSearch.addEventListener("input", renderOrders);
   els.statusFilter.addEventListener("change", renderOrders);
   els.cashType.addEventListener("change", syncCashCategory);
   els.cashCategory.addEventListener("change", syncCashContext);
-  els.cashOrderSelect.addEventListener("change", fillCashFromOrder);
+  if (els.cashOrderSelect) {
+    els.cashOrderSelect.addEventListener("change", fillCashFromOrder);
+  }
+  if (els.cashClientCpf) {
+    els.cashClientCpf.addEventListener("input", handleCashClientCpfLookup);
+    els.cashClientCpf.addEventListener("blur", handleCashClientCpfLookup);
+  }
   els.cashMethod.addEventListener("change", syncCreditFields);
   els.cashPaymentMode.addEventListener("change", syncCreditFields);
   els.cashForm.addEventListener("submit", saveCashMovement);
+  if (els.cancelCashEditButton) {
+    els.cancelCashEditButton.addEventListener("click", resetCashEditor);
+  }
+  els.cashTable.addEventListener("click", handleCashTableClick);
+  if (els.cashHistoryTable) {
+    els.cashHistoryTable.addEventListener("click", handleCashHistoryTableClick);
+  }
   els.companyForm.addEventListener("submit", saveCompany);
+  els.clientForm.addEventListener("submit", saveClient);
+  els.productForm.addEventListener("submit", saveProduct);
   els.backupButton.addEventListener("click", exportBackup);
   els.restoreInput.addEventListener("change", importBackup);
+  if (els.clientNameInput) {
+    els.clientNameInput.addEventListener("input", updateClientSuggestions);
+  }
+  if (els.clientCpfInput) {
+    els.clientCpfInput.addEventListener("blur", lookupClientByCpf);
+  }
+  if (els.clientName) {
+    els.clientName.addEventListener("input", updateClientSuggestions);
+    els.clientName.addEventListener("blur", lookupClientByName);
+  }
+  if (els.clientCpf) {
+    els.clientCpf.addEventListener("blur", lookupClientByCpf);
+  }
+  if (els.historyButton) {
+    els.historyButton.addEventListener("click", () => openHistoryDialog());
+  }
+  if (els.closeHistoryDialog) {
+    els.closeHistoryDialog.addEventListener("click", () => els.historyDialog.close());
+  }
+  els.historyTabs.forEach((button) => {
+    button.addEventListener("click", () => setHistoryTab(button.dataset.historyTarget));
+  });
+  if (els.downloadOrdersHistory) {
+    els.downloadOrdersHistory.addEventListener("click", () => exportHistoryExcel("orders"));
+  }
+  if (els.downloadCashHistory) {
+    els.downloadCashHistory.addEventListener("click", () => exportHistoryExcel("cash"));
+  }
 }
 
 function syncCashCategory() {
@@ -141,9 +226,12 @@ function syncCashContext() {
   els.cashOrderLabel.classList.toggle("visible", isMaintenance);
   els.cashClientLabel.classList.toggle("hidden-field", isExpense);
   els.cashClientLabel.classList.toggle("visible", !isExpense);
+  els.cashClientCpfLabel.classList.toggle("hidden-field", !isMaintenance);
+  els.cashClientCpfLabel.classList.toggle("visible", isMaintenance);
 
   if (isExpense) {
     els.cashClientName.value = "";
+    els.cashClientCpf.value = "";
     els.cashOrderSelect.value = "";
   }
 }
@@ -154,8 +242,21 @@ function fillCashFromOrder() {
 
   const balance = orderBalance(order);
   els.cashClientName.value = order.clientName;
+  els.cashClientCpf.value = order.clientCpf || els.cashClientCpf.value || "";
   els.cashDescription.value = `Pagamento ${order.code} - ${order.clientName} - ${order.deviceType} ${order.deviceModel}`;
   els.cashAmount.value = balance.toFixed(2);
+}
+
+function handleCashClientCpfLookup() {
+  if (els.cashCategory.value !== "Manutencao/OS") return;
+  const cpf = (els.cashClientCpf.value || "").trim();
+  if (!cpf) return;
+
+  const order = state.orders.find((item) => normalize(item.clientCpf || "") === normalize(cpf));
+  if (!order) return;
+
+  els.cashOrderSelect.value = order.id;
+  fillCashFromOrder();
 }
 
 function syncCreditFields() {
@@ -172,28 +273,77 @@ function syncCreditFields() {
   }
 }
 
-function loadState() {
+async function loadState() {
   const fallback = {
-    company: {
-      name: "Minha Assistencia Tecnica",
-      phone: "",
-      document: "",
-      address: "",
-      notes: "Garantia conforme servico descrito na ordem."
-    },
+    company: defaultCompany(),
     orders: [],
-    cash: []
+    cash: [],
+    clients: [],
+    products: []
   };
 
+  if (API_BASE) {
+    try {
+      const response = await fetch(`${API_BASE}/api/state`);
+      if (response.ok) {
+        const remote = await response.json();
+        return {
+          company: { ...defaultCompany(), ...remote.company },
+          orders: Array.isArray(remote.orders) ? remote.orders : [],
+          cash: Array.isArray(remote.cash) ? remote.cash : [],
+          clients: Array.isArray(remote.clients) ? remote.clients : [],
+          products: Array.isArray(remote.products) ? remote.products : []
+        };
+      }
+    } catch {
+      // Fallback para localStorage quando a API não estiver disponível.
+    }
+  }
+
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || fallback;
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!saved) return fallback;
+
+    return {
+      company: { ...defaultCompany(), ...saved.company },
+      orders: Array.isArray(saved.orders) ? saved.orders : [],
+      cash: Array.isArray(saved.cash) ? saved.cash : [],
+      clients: Array.isArray(saved.clients) ? saved.clients : [],
+      products: Array.isArray(saved.products) ? saved.products : []
+    };
   } catch {
     return fallback;
   }
 }
 
-function persist() {
+function defaultCompany() {
+  return {
+    name: "CCN SOLUÇÕES TECNOLÓGICAS",
+    phone: "11-2936-2016",
+    document: "11-94573-0188",
+    address: "Rua Dr. SÍlvio Dante Bertacchi, 166 - Vila Sonia, São Paulo",
+    notes: "Assistência Técnica Especializada em Celular - Notebook - Computador - Tablet\nHorario de atendimento: das 10hrs as 18hrs de Segunda a Sexta-feira e aos Sábado das 10hrs as 15hrs"
+  };
+}
+
+async function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+  if (!API_BASE) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/state`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state)
+    });
+
+    if (!response.ok) {
+      throw new Error("API indisponivel");
+    }
+  } catch {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
 }
 
 function setView(view) {
@@ -209,15 +359,27 @@ function setView(view) {
     dashboard: "Painel",
     orders: "Ordens de servico",
     cash: "Caixa",
+    clients: "Cadastro de cliente",
+    products: "Cadastro de produto",
     settings: "Empresa"
   };
   els.pageTitle.textContent = titles[view];
+
+  const showHistory = ["orders", "cash"].includes(view);
+  const showNewOrder = view === "orders";
+
+  if (els.historyButton) els.historyButton.hidden = !showHistory;
+  if (els.newOrderButton) els.newOrderButton.hidden = !showNewOrder;
 }
 
 function render() {
   renderDashboard();
   renderOrders();
   renderCash();
+  renderHistoryTables();
+  renderClientCatalog();
+  renderProductCatalog();
+  syncAutocompleteLists();
 }
 
 function renderDashboard() {
@@ -329,9 +491,107 @@ function renderCash() {
         <td>${escapeHtml(item.description)}</td>
         <td>${escapeHtml(paymentLabel(item))}</td>
         <td>${item.type === "entrada" ? "+" : "-"} ${money.format(Number(item.amount))}</td>
+        <td><button class="ghost-button" type="button" data-edit-cash="${item.id}">Editar</button></td>
       </tr>
     `).join("")
-    : `<tr><td colspan="6">Nenhum movimento cadastrado.</td></tr>`;
+    : `<tr><td colspan="7">Nenhum movimento cadastrado.</td></tr>`;
+}
+
+function handleCashTableClick(event) {
+  const button = event.target.closest("[data-edit-cash]");
+  if (!button) return;
+
+  const item = state.cash.find((entry) => entry.id === button.dataset.editCash);
+  if (!item) return;
+
+  openCashEditor(item);
+}
+
+function openCashEditor(item) {
+  editingCashId = item.id;
+  els.cashType.value = item.type || "entrada";
+  els.cashCategory.value = item.category || "Venda";
+  els.cashMethod.value = item.method || "Dinheiro";
+  els.cashDescription.value = item.description || "";
+  els.cashAmount.value = Number(item.amount || 0);
+  els.cashDate.value = item.date || toDateInput(new Date());
+  els.cashClientName.value = item.clientName || "";
+  els.cashClientCpf.value = item.clientCpf || "";
+  els.cashOrderSelect.value = item.orderId || "";
+  els.cashPaymentMode.value = item.paymentMode || "avista";
+  els.cashInstallments.value = String(item.installments || 1);
+  syncCashContext();
+  syncCreditFields();
+
+  const button = els.cashForm.querySelector("#saveCashButton");
+  if (button) button.textContent = "Salvar edição";
+
+  const cancelButton = els.cashForm.querySelector("#cancelCashEditButton");
+  if (cancelButton) cancelButton.hidden = false;
+}
+
+function resetCashEditor() {
+  editingCashId = null;
+  els.cashForm.reset();
+  els.cashDate.valueAsDate = new Date();
+  syncCashCategory();
+  syncCreditFields();
+
+  const button = els.cashForm.querySelector("#saveCashButton");
+  if (button) button.textContent = "Salvar movimento";
+
+  const cancelButton = els.cashForm.querySelector("#cancelCashEditButton");
+  if (cancelButton) cancelButton.hidden = true;
+}
+
+function renderHistoryTables() {
+  const orders = [...state.orders].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const cash = [...state.cash].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  els.ordersHistoryTable.innerHTML = orders.length
+    ? orders.map((order) => {
+        const balance = Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0);
+        return `
+          <tr>
+            <td>${escapeHtml(order.code)}</td>
+            <td>${escapeHtml(order.clientName)}</td>
+            <td>${escapeHtml(`${order.deviceType} ${order.deviceModel}`)}</td>
+            <td><span class="chip ${statusClass(order.status)}">${escapeHtml(order.status)}</span></td>
+            <td>${formatDate(order.createdDate)}</td>
+            <td>${order.dueDate ? formatDate(order.dueDate) : "-"}</td>
+            <td>${money.format(orderTotal(order))}</td>
+            <td>${money.format(Number(order.depositAmount || 0))}</td>
+            <td>${money.format(balance)}</td>
+          </tr>
+        `;
+      }).join("")
+    : `<tr><td colspan="9">Nenhuma ordem no historico.</td></tr>`;
+
+  els.cashHistoryTable.innerHTML = cash.length
+    ? cash.map((item) => `
+      <tr>
+        <td>${formatDate(item.date)} <button class="ghost-button" type="button" data-edit-cash-history="${item.id}" style="margin-left: 8px;">Editar</button></td>
+        <td>${escapeHtml(item.type === "entrada" ? "Entrada" : "Saida")}</td>
+        <td>${escapeHtml(item.category || "Movimento")}</td>
+        <td>${escapeHtml(item.description)}</td>
+        <td>${escapeHtml(paymentLabel(item))}</td>
+        <td>${escapeHtml(item.clientName || item.orderId || "-")}</td>
+        <td>${item.type === "entrada" ? "+" : "-"} ${money.format(Number(item.amount))}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="7">Nenhum movimento de caixa no historico.</td></tr>`;
+}
+
+function handleCashHistoryTableClick(event) {
+  const button = event.target.closest("[data-edit-cash-history]");
+  if (!button) return;
+
+  const item = state.cash.find((entry) => entry.id === button.dataset.editCashHistory);
+  if (!item) return;
+
+  openCashEditor(item);
+  setView("cash");
+  els.historyDialog.close();
 }
 
 function renderCashOrderOptions() {
@@ -350,6 +610,136 @@ function renderCashOrderOptions() {
 
   els.cashOrderSelect.innerHTML = `<option value="">Selecione uma OS</option>${options}`;
   els.cashOrderSelect.value = currentValue;
+}
+
+function renderClientCatalog() {
+  if (!els.clientList) return;
+  els.clientList.innerHTML = state.clients.length
+    ? state.clients.map((client) => `
+      <tr>
+        <td>${escapeHtml(client.name || "-")}</td>
+        <td>${escapeHtml(client.phone || "-")}</td>
+        <td>${escapeHtml(client.cpf || "-")}</td>
+        <td>${escapeHtml(client.address || "-")}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="4">Nenhum cliente cadastrado.</td></tr>`;
+}
+
+function renderProductCatalog() {
+  if (!els.productList) return;
+  els.productList.innerHTML = state.products.length
+    ? state.products.map((product) => `
+      <tr>
+        <td>${escapeHtml(product.code || "-")}</td>
+        <td>${escapeHtml(product.name || "-")}</td>
+        <td>${escapeHtml(product.category || "-")}</td>
+        <td>${escapeHtml(product.brand || "-")}</td>
+        <td>${money.format(Number(product.price || 0))}</td>
+        <td>${escapeHtml(product.stock || "0")}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="6">Nenhum produto cadastrado.</td></tr>`;
+}
+
+function syncAutocompleteLists() {
+  const clientOptions = state.clients.map((client) => `<option value="${escapeHtml(client.name)}"></option>`).join("");
+  if (document.querySelector("#clientSuggestions")) {
+    document.querySelector("#clientSuggestions").innerHTML = clientOptions;
+  }
+
+  const productOptions = state.products.map((product) => `<option value="${escapeHtml(product.name)}"></option>`).join("");
+  if (document.querySelector("#productSuggestions")) {
+    document.querySelector("#productSuggestions").innerHTML = productOptions;
+  }
+}
+
+function saveClient(event) {
+  event.preventDefault();
+  const payload = {
+    id: crypto.randomUUID(),
+    name: els.clientNameInput.value.trim(),
+    phone: els.clientPhoneInput.value.trim(),
+    cpf: els.clientCpfInput.value.trim(),
+    messagePhone: els.clientMessagePhoneInput.value.trim(),
+    address: els.clientAddressInput.value.trim()
+  };
+
+  if (!payload.name) {
+    alert("Informe o nome do cliente.");
+    return;
+  }
+
+  const existing = state.clients.find((client) => client.cpf && client.cpf === payload.cpf);
+  if (existing) {
+    state.clients = state.clients.map((client) => client.id === existing.id ? { ...existing, ...payload } : client);
+  } else {
+    state.clients.push(payload);
+  }
+
+  persist();
+  els.clientForm.reset();
+  render();
+}
+
+function saveProduct(event) {
+  event.preventDefault();
+  const payload = {
+    id: crypto.randomUUID(),
+    code: els.productCodeInput.value.trim(),
+    name: els.productNameInput.value.trim(),
+    category: els.productCategoryInput.value.trim(),
+    brand: els.productBrandInput.value.trim(),
+    price: Number(els.productPriceInput.value || 0),
+    stock: Number(els.productStockInput.value || 0)
+  };
+
+  if (!payload.name) {
+    alert("Informe o nome do produto.");
+    return;
+  }
+
+  const existing = state.products.find((product) => product.code && product.code === payload.code);
+  if (existing) {
+    state.products = state.products.map((product) => product.id === existing.id ? { ...existing, ...payload } : product);
+  } else {
+    state.products.push(payload);
+  }
+
+  persist();
+  els.productForm.reset();
+  render();
+}
+
+function updateClientSuggestions() {
+  if (!els.clientName) return;
+  const value = normalize(els.clientName.value);
+  const matches = !value ? state.clients : state.clients.filter((client) => normalize(client.name).includes(value) || normalize(client.cpf).includes(value));
+  if (document.querySelector("#clientSuggestions")) {
+    document.querySelector("#clientSuggestions").innerHTML = matches.map((client) => `<option value="${escapeHtml(client.name)}"></option>`).join("");
+  }
+}
+
+function lookupClientByCpf() {
+  const cpf = (els.clientCpf || {}).value || "";
+  if (!cpf) return;
+  const client = state.clients.find((item) => normalize(item.cpf || "") === normalize(cpf));
+  if (!client) return;
+  if (els.clientName) els.clientName.value = client.name || "";
+  if (els.clientPhone) els.clientPhone.value = client.phone || "";
+  if (els.clientMessagePhone) els.clientMessagePhone.value = client.messagePhone || "";
+  if (els.clientAddress) els.clientAddress.value = client.address || "";
+}
+
+function lookupClientByName() {
+  const name = (els.clientName || {}).value || "";
+  if (!name) return;
+  const client = state.clients.find((item) => normalize(item.name || "") === normalize(name));
+  if (!client) return;
+  if (els.clientCpf) els.clientCpf.value = client.cpf || "";
+  if (els.clientPhone) els.clientPhone.value = client.phone || "";
+  if (els.clientMessagePhone) els.clientMessagePhone.value = client.messagePhone || "";
+  if (els.clientAddress) els.clientAddress.value = client.address || "";
 }
 
 function openOrderDialog(id = null) {
@@ -405,11 +795,36 @@ function openOrderDialog(id = null) {
 
 function addItemRow(item = { description: "", qty: 1, price: 0 }) {
   const fragment = els.itemTemplate.content.cloneNode(true);
-  fragment.querySelector(".item-description").value = item.description || "";
-  fragment.querySelector(".item-qty").value = item.qty || 1;
-  fragment.querySelector(".item-price").value = item.price || 0;
+  const descriptionInput = fragment.querySelector(".item-description");
+  const quantityInput = fragment.querySelector(".item-qty");
+  const priceInput = fragment.querySelector(".item-price");
+
+  descriptionInput.value = item.description || "";
+  quantityInput.value = item.qty || 1;
+  priceInput.value = item.price || 0;
+
+  descriptionInput.addEventListener("input", () => {
+    const product = findProductByNameOrCode(descriptionInput.value);
+    if (!product) return;
+    descriptionInput.value = product.name;
+    priceInput.value = Number(product.price || 0).toFixed(2);
+    calculateDialogTotal();
+  });
+
   els.itemsList.append(fragment);
   calculateDialogTotal();
+}
+
+function findProductByNameOrCode(value) {
+  const query = normalize((value || "").trim());
+  if (!query) return null;
+
+  return state.products.find((product) => {
+    const name = normalize(product.name || "");
+    const code = normalize(product.code || "");
+    const category = normalize(product.category || "");
+    return name.includes(query) || code.includes(query) || category.includes(query);
+  }) || null;
 }
 
 function handleItemRemove(event) {
@@ -490,12 +905,17 @@ function printCurrentOrder() {
 }
 
 function buildReceiptHtml(order) {
+  const companyDescription = (state.company.notes || "").split("\n")[0] || "Assistência Técnica Especializada em Celular - Notebook - Computador - Tablet";
+  const companyHours = (state.company.notes || "").split("\n").slice(1).join(" ") || "";
+
   return `
     <img class="receipt-logo" src="logo.png.jpeg" alt="">
     <h1>${escapeHtml(state.company.name)}</h1>
+    <p class="receipt-center">${escapeHtml(companyDescription)}</p>
+    ${state.company.address ? `<p class="receipt-center">Endereço: ${escapeHtml(state.company.address)}</p>` : ""}
+    ${state.company.phone ? `<p class="receipt-center">${escapeHtml(state.company.phone)}</p>` : ""}
     ${state.company.document ? `<p class="receipt-center">${escapeHtml(state.company.document)}</p>` : ""}
-    ${state.company.phone ? `<p class="receipt-center">Tel: ${escapeHtml(state.company.phone)}</p>` : ""}
-    ${state.company.address ? `<p class="receipt-center">${escapeHtml(state.company.address)}</p>` : ""}
+    ${companyHours ? `<p class="receipt-center">${escapeHtml(companyHours)}</p>` : ""}
     <div class="receipt-line"></div>
     <h2>ORDEM DE SERVICO</h2>
     <p class="receipt-center">${escapeHtml(order.code)}</p>
@@ -563,22 +983,32 @@ function buildReceiptHtml(order) {
 
 function readItemsFromDialog() {
   return [...els.itemsList.querySelectorAll(".item-row")]
-    .map((row) => ({
-      description: row.querySelector(".item-description").value.trim(),
-      qty: Number(row.querySelector(".item-qty").value || 1),
-      price: Number(row.querySelector(".item-price").value || 0)
-    }))
+    .map((row) => {
+      const descriptionInput = row.querySelector(".item-description");
+      const qtyInput = row.querySelector(".item-qty");
+      const priceInput = row.querySelector(".item-price");
+      const description = (descriptionInput?.value || "").trim();
+      const qty = Number(qtyInput?.value || 1);
+      const price = Number(priceInput?.value || 0);
+
+      return {
+        description,
+        qty,
+        price
+      };
+    })
     .filter((item) => item.description || item.price > 0);
 }
 
 function saveCashMovement(event) {
   event.preventDefault();
-  state.cash.push({
-    id: crypto.randomUUID(),
+  const payload = {
+    id: editingCashId || crypto.randomUUID(),
     type: els.cashType.value,
     category: els.cashCategory.value,
     orderId: els.cashCategory.value === "Manutencao/OS" ? els.cashOrderSelect.value : "",
     clientName: els.cashClientName.value.trim(),
+    clientCpf: els.cashClientCpf.value.trim(),
     method: els.cashMethod.value,
     paymentMode: els.cashMethod.value === "Cartao credito" ? els.cashPaymentMode.value : "avista",
     installments: els.cashMethod.value === "Cartao credito" && els.cashPaymentMode.value === "parcelado"
@@ -587,22 +1017,29 @@ function saveCashMovement(event) {
     description: els.cashDescription.value.trim(),
     amount: Number(els.cashAmount.value),
     date: els.cashDate.value,
-    createdAt: new Date().toISOString()
-  });
+    createdAt: editingCashId ? (state.cash.find((item) => item.id === editingCashId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
+  };
+
+  if (editingCashId) {
+    state.cash = state.cash.map((item) => item.id === editingCashId ? payload : item);
+  } else {
+    state.cash.push(payload);
+  }
+
   persist();
-  els.cashForm.reset();
-  els.cashDate.valueAsDate = new Date();
-  syncCashCategory();
-  syncCreditFields();
+  resetCashEditor();
   render();
 }
 
 function fillCompanyForm() {
-  els.companyName.value = state.company.name;
-  els.companyPhone.value = state.company.phone;
-  els.companyDocument.value = state.company.document;
-  els.companyAddress.value = state.company.address;
-  els.companyNotes.value = state.company.notes;
+  const company = { ...defaultCompany(), ...state.company };
+  state.company = company;
+
+  els.companyName.value = company.name;
+  els.companyPhone.value = company.phone;
+  els.companyDocument.value = company.document;
+  els.companyAddress.value = company.address;
+  els.companyNotes.value = company.notes;
 }
 
 function saveCompany(event) {
@@ -616,6 +1053,71 @@ function saveCompany(event) {
   };
   persist();
   alert("Dados da empresa salvos.");
+}
+
+function openHistoryDialog() {
+  setHistoryTab("ordersHistoryPanel");
+  els.historyDialog.showModal();
+}
+
+function setHistoryTab(targetId) {
+  els.historyTabs.forEach((button) => {
+    const isActive = button.dataset.historyTarget === targetId;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  document.querySelectorAll(".history-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === targetId);
+  });
+}
+
+function exportHistoryExcel(type) {
+  if (!window.XLSX) {
+    alert("A biblioteca de Excel nao foi carregada. Tente novamente em instantes.");
+    return;
+  }
+
+  if (type === "orders") {
+    const rows = [...state.orders]
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((order) => ({
+        OS: order.code,
+        Cliente: order.clientName,
+        Equipamento: `${order.deviceType} ${order.deviceModel}`,
+        Status: order.status,
+        Entrada: order.createdDate || "-",
+        Previsao: order.dueDate || "-",
+        Total: orderTotal(order),
+        Sinal: Number(order.depositAmount || 0),
+        Saldo: Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0),
+        Telefone: order.clientPhone || "-",
+        CPF: order.clientCpf || "-"
+      }));
+
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "HistoricoOS");
+    XLSX.writeFile(workbook, "historico_ordens_servico.xlsx");
+    return;
+  }
+
+  const rows = [...state.cash]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((item) => ({
+      Data: item.date,
+      Tipo: item.type === "entrada" ? "Entrada" : "Saida",
+      Categoria: item.category || "Movimento",
+      Descricao: item.description,
+      Forma: paymentLabel(item),
+      Cliente_OS: item.clientName || item.orderId || "-",
+      Valor: Number(item.amount)
+    }));
+
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "HistoricoCaixa");
+  XLSX.writeFile(workbook, "historico_caixa.xlsx");
 }
 
 function exportBackup() {
@@ -724,6 +1226,19 @@ function maskBrazilianDate(event) {
   if (digits.length > 4) parts.push(digits.slice(4, 8));
 
   event.target.value = parts.join("/");
+}
+
+function normalizeBrazilianDateInput(event) {
+  const value = event.target.value.trim();
+  if (!value) return;
+
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length !== 8) return;
+
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+  event.target.value = `${day}/${month}/${year}`;
 }
 
 function parseBrazilianDate(value) {

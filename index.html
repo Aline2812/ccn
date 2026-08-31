@@ -10,22 +10,27 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">AT</div>
-          <div>
-            <strong>Assistencia</strong>
-            <span>OS + Caixa</span>
+          <img class="brand-logo" src="logo.png.jpeg" alt="Logo da assistência técnica">
+          <div class="brand-copy">
+            <strong>CCN SOLUÇÕES TECNOLÓGICAS</strong>
+            <span>Assistência Técnica Especializada em Celular - Notebook - Computador - Tablet</span>
+            <span>Endereço: Rua Dr. SÍlvio Dante Bertacchi, 166 - Vila Sonia, São Paulo</span>
+            <span>TEL: 11-2936-2016 | WhatsApp: 11-94573-0188</span>
+            <span>Horário de atendimento: das 10hrs as 18hrs de Segunda a Sexta-feira e aos Sábado das 10hrs as 15hrs</span>
           </div>
         </div>
         <nav class="nav" aria-label="Navegacao principal">
           <button class="nav-button active" data-view="dashboard" type="button">Painel</button>
           <button class="nav-button" data-view="orders" type="button">Ordens</button>
           <button class="nav-button" data-view="cash" type="button">Caixa</button>
+          <button class="nav-button" data-view="clients" type="button">Clientes</button>
+          <button class="nav-button" data-view="products" type="button">Produtos</button>
           <button class="nav-button" data-view="settings" type="button">Empresa</button>
         </nav>
         <div class="side-panel">
           <span>Status rapido</span>
           <strong id="openOrdersCount">0 abertas</strong>
-          <small>Dados salvos neste navegador.</small>
+          <small>Dados sincronizados pela API.</small>
         </div>
       </aside>
 
@@ -41,6 +46,7 @@
               ⇧
               <input id="restoreInput" type="file" accept="application/json">
             </label>
+            <button class="ghost-button" id="historyButton" type="button">Histórico</button>
             <button class="primary-button" id="newOrderButton" type="button">Nova OS</button>
           </div>
         </header>
@@ -171,6 +177,20 @@
                     <option value="12">12x</option>
                   </select>
                 </label>
+                <label id="cashOrderLabel" class="hidden-field">
+                  OS vinculada
+                  <select id="cashOrderSelect">
+                    <option value="">Selecione uma OS</option>
+                  </select>
+                </label>
+                <label id="cashClientLabel" class="hidden-field">
+                  Cliente
+                  <input id="cashClientName" placeholder="Nome do cliente">
+                </label>
+                <label id="cashClientCpfLabel" class="hidden-field">
+                  CPF do cliente
+                  <input id="cashClientCpf" placeholder="CPF do cliente">
+                </label>
                 <label class="wide">
                   Descricao
                   <input id="cashDescription" required placeholder="Ex: venda de carregador, pagamento OS-2026-0001, compra de peca">
@@ -183,7 +203,10 @@
                   Data
                   <input id="cashDate" type="date" required>
                 </label>
-                <button class="primary-button wide" type="submit">Salvar movimento</button>
+                <div class="wide" style="display:flex; gap:10px;">
+                  <button id="saveCashButton" class="primary-button" type="submit">Salvar movimento</button>
+                  <button id="cancelCashEditButton" class="ghost-button" type="button" hidden>Cancelar edicao</button>
+                </div>
               </form>
             </section>
             <section class="panel">
@@ -200,6 +223,7 @@
                       <th>Descricao</th>
                       <th>Forma</th>
                       <th>Valor</th>
+                      <th>Acoes</th>
                     </tr>
                   </thead>
                   <tbody id="cashTable"></tbody>
@@ -207,6 +231,112 @@
               </div>
             </section>
           </div>
+        </section>
+
+        <section class="view" id="clientsView">
+          <section class="panel settings-panel">
+            <div class="panel-heading">
+              <h2>Cadastro de cliente</h2>
+            </div>
+            <form id="clientForm" class="form-grid">
+              <label>
+                Nome
+                <input id="clientNameInput" required>
+              </label>
+              <label>
+                Telefone
+                <input id="clientPhoneInput">
+              </label>
+              <label>
+                CPF
+                <input id="clientCpfInput">
+              </label>
+              <label>
+                WhatsApp / Recado
+                <input id="clientMessagePhoneInput">
+              </label>
+              <label class="wide">
+                Endereco
+                <input id="clientAddressInput">
+              </label>
+              <button class="primary-button wide" type="submit">Salvar cliente</button>
+            </form>
+          </section>
+
+          <section class="panel settings-panel" style="margin-top: 16px;">
+            <div class="panel-heading">
+              <h2>Lista de clientes</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Telefone</th>
+                    <th>CPF</th>
+                    <th>Endereco</th>
+                  </tr>
+                </thead>
+                <tbody id="clientList"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="productsView">
+          <section class="panel settings-panel">
+            <div class="panel-heading">
+              <h2>Cadastro de produto</h2>
+            </div>
+            <form id="productForm" class="form-grid">
+              <label>
+                Codigo
+                <input id="productCodeInput">
+              </label>
+              <label>
+                Nome do produto
+                <input id="productNameInput" required>
+              </label>
+              <label>
+                Categoria
+                <input id="productCategoryInput">
+              </label>
+              <label>
+                Marca
+                <input id="productBrandInput">
+              </label>
+              <label>
+                Preco
+                <input id="productPriceInput" type="number" min="0" step="0.01">
+              </label>
+              <label>
+                Estoque
+                <input id="productStockInput" type="number" min="0" step="1" value="0">
+              </label>
+              <button class="primary-button wide" type="submit">Salvar produto</button>
+            </form>
+          </section>
+
+          <section class="panel settings-panel" style="margin-top: 16px;">
+            <div class="panel-heading">
+              <h2>Lista de produtos</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Codigo</th>
+                    <th>Nome</th>
+                    <th>Categoria</th>
+                    <th>Marca</th>
+                    <th>Preco</th>
+                    <th>Estoque</th>
+                  </tr>
+                </thead>
+                <tbody id="productList"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
 
         <section class="view" id="settingsView">
@@ -242,6 +372,71 @@
       </main>
     </div>
 
+    <dialog id="historyDialog">
+      <div class="history-dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Relatorios</p>
+            <h2>Historico</h2>
+          </div>
+          <button class="icon-button" id="closeHistoryDialog" value="cancel" type="button" title="Fechar">×</button>
+        </div>
+
+        <div class="history-tabs" role="tablist" aria-label="Historicos">
+          <button class="history-tab active" data-history-target="ordersHistoryPanel" type="button" role="tab" aria-selected="true">Ordem de servico</button>
+          <button class="history-tab" data-history-target="cashHistoryPanel" type="button" role="tab" aria-selected="false">Caixa</button>
+        </div>
+
+        <div class="history-panel active" id="ordersHistoryPanel" role="tabpanel">
+          <div class="panel-heading history-header">
+            <h3>Historico de ordens</h3>
+            <button class="primary-button" id="downloadOrdersHistory" type="button">Baixar Excel</button>
+          </div>
+          <div class="table-wrap">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>OS</th>
+                  <th>Cliente</th>
+                  <th>Equipamento</th>
+                  <th>Status</th>
+                  <th>Entrada</th>
+                  <th>Previsao</th>
+                  <th>Total</th>
+                  <th>Sinal</th>
+                  <th>Saldo</th>
+                </tr>
+              </thead>
+              <tbody id="ordersHistoryTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="history-panel" id="cashHistoryPanel" role="tabpanel">
+          <div class="panel-heading history-header">
+            <h3>Historico de caixa</h3>
+            <button class="primary-button" id="downloadCashHistory" type="button">Baixar Excel</button>
+          </div>
+          <div class="table-wrap">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Tipo</th>
+                  <th>Categoria</th>
+                  <th>Descricao</th>
+                  <th>Forma</th>
+                  <th>Cliente/OS</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody id="cashHistoryTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
     <dialog id="orderDialog">
       <form id="orderForm" method="dialog">
         <div class="dialog-heading">
@@ -255,11 +450,25 @@
         <div class="form-grid">
           <label>
             Cliente
-            <input id="clientName" required>
+            <input id="clientName" list="clientSuggestions" required>
+            <datalist id="clientSuggestions"></datalist>
           </label>
           <label>
             Telefone
             <input id="clientPhone" required>
+          </label>
+          <label>
+            CPF
+            <input id="clientCpf" list="clientSuggestionsCpf">
+            <datalist id="clientSuggestionsCpf"></datalist>
+          </label>
+          <label>
+            Recado / WhatsApp
+            <input id="clientMessagePhone">
+          </label>
+          <label>
+            Endereco
+            <input id="clientAddress">
           </label>
           <label>
             Tipo
@@ -306,7 +515,11 @@
           </label>
           <label>
             Previsao
-            <input id="dueDate" type="date">
+            <input id="dueDate" type="text" inputmode="numeric" placeholder="DD/MM/AAAA">
+          </label>
+          <label>
+            Valor do sinal
+            <input id="depositAmount" type="number" min="0" step="0.01" value="0">
           </label>
           <label>
             Data de entrada
@@ -360,9 +573,11 @@
       </form>
     </dialog>
 
+    <datalist id="productSuggestions"></datalist>
+
     <template id="itemTemplate">
       <div class="item-row">
-        <input class="item-description" placeholder="Descricao do item">
+        <input class="item-description" list="productSuggestions" placeholder="Descricao do item">
         <input class="item-qty" type="number" min="1" step="1" value="1" aria-label="Quantidade">
         <input class="item-price" type="number" min="0" step="0.01" value="0" aria-label="Valor">
         <button class="icon-button remove-item" type="button" title="Remover item">×</button>
@@ -371,6 +586,7 @@
 
     <section id="receiptPrintArea" class="receipt-print" aria-hidden="true"></section>
 
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
