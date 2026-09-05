@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "API e banco de dados para sistema de ordens e caixa",
   "main": "server.js",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
@@ -11,6 +14,8 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "nedb": "^1.8.0"
+    "mongodb": "^7.6.0",
+    "nedb": "^1.8.0",
+    "pg": "^8.23.0"
   }
 }

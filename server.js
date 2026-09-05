@@ -2,10 +2,22 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const Datastore = require('nedb');
+const util = require('util');
 
-const DATA_DIR = path.join(__dirname, 'data');
+util.isArray = Array.isArray;
+util.isDate = util.isDate || util.types.isDate;
+util.isRegExp = util.isRegExp || util.types.isRegExp;
+
+const Datastore = require('nedb');
+const { MongoClient } = require('mongodb');
+const { Pool } = require('pg');
+
+const DATA_DIR = process.env.CCN_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app-state.db');
+const POSTGRES_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_DB = process.env.MONGODB_DB || 'ccn';
+const STATE_ID = 'app_state';
 
 const DEFAULT_STATE = {
   company: {
@@ -31,79 +43,197 @@ function createDatabase() {
   ensureDataDir();
   const db = new Datastore({ filename: DB_PATH, autoload: true });
 
-  db.findOne({ _id: 'app_state' }, (err, record) => {
+  db.findOne({ _id: STATE_ID }, (err, record) => {
     if (err) throw err;
     if (!record) {
-      db.insert({ _id: 'app_state', ...DEFAULT_STATE });
+      db.insert({ _id: STATE_ID, ...DEFAULT_STATE });
     }
   });
 
   return db;
 }
 
+function cleanState(payload = DEFAULT_STATE) {
+  return {
+    company: payload.company || DEFAULT_STATE.company,
+    orders: Array.isArray(payload.orders) ? payload.orders : [],
+    cash: Array.isArray(payload.cash) ? payload.cash : [],
+    clients: Array.isArray(payload.clients) ? payload.clients : [],
+    products: Array.isArray(payload.products) ? payload.products : []
+  };
+}
+
+function createLocalStore() {
+  const db = createDatabase();
+
+  return {
+    type: 'local',
+    location: DB_PATH,
+    getState() {
+      return new Promise((resolve, reject) => {
+        db.findOne({ _id: STATE_ID }, (err, record) => {
+          if (err) return reject(err);
+          return resolve(cleanState(record || DEFAULT_STATE));
+        });
+      });
+    },
+    saveState(payload) {
+      const clean = cleanState(payload);
+
+      return new Promise((resolve, reject) => {
+        db.update(
+          { _id: STATE_ID },
+          { _id: STATE_ID, ...clean },
+          { upsert: true },
+          (err) => {
+            if (err) return reject(err);
+            return resolve(clean);
+          }
+        );
+      });
+    },
+    resetState() {
+      return this.saveState(DEFAULT_STATE);
+    }
+  };
+}
+
+async function createMongoStore() {
+  const client = new MongoClient(MONGODB_URI);
+  await client.connect();
+
+  const collection = client.db(MONGODB_DB).collection('app_state');
+  await collection.updateOne(
+    { _id: STATE_ID },
+    { $setOnInsert: { _id: STATE_ID, ...DEFAULT_STATE } },
+    { upsert: true }
+  );
+
+  return {
+    type: 'mongodb',
+    location: `${MONGODB_DB}.app_state`,
+    async getState() {
+      const record = await collection.findOne({ _id: STATE_ID });
+      return cleanState(record || DEFAULT_STATE);
+    },
+    async saveState(payload) {
+      const clean = cleanState(payload);
+      await collection.replaceOne(
+        { _id: STATE_ID },
+        { _id: STATE_ID, ...clean },
+        { upsert: true }
+      );
+      return clean;
+    },
+    resetState() {
+      return this.saveState(DEFAULT_STATE);
+    }
+  };
+}
+
+async function createPostgresStore() {
+  const pool = new Pool({
+    connectionString: POSTGRES_URL,
+    ssl: process.env.POSTGRES_SSL === 'false' ? false : { rejectUnauthorized: false }
+  });
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_state (
+      id TEXT PRIMARY KEY,
+      state JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(
+    `
+      INSERT INTO app_state (id, state)
+      VALUES ($1, $2::jsonb)
+      ON CONFLICT (id) DO NOTHING
+    `,
+    [STATE_ID, JSON.stringify(DEFAULT_STATE)]
+  );
+
+  return {
+    type: 'postgresql',
+    location: 'app_state',
+    async getState() {
+      const result = await pool.query('SELECT state FROM app_state WHERE id = $1', [STATE_ID]);
+      return cleanState(result.rows[0]?.state || DEFAULT_STATE);
+    },
+    async saveState(payload) {
+      const clean = cleanState(payload);
+      await pool.query(
+        `
+          INSERT INTO app_state (id, state, updated_at)
+          VALUES ($1, $2::jsonb, NOW())
+          ON CONFLICT (id)
+          DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()
+        `,
+        [STATE_ID, JSON.stringify(clean)]
+      );
+      return clean;
+    },
+    resetState() {
+      return this.saveState(DEFAULT_STATE);
+    }
+  };
+}
+
+function createStore() {
+  if (POSTGRES_URL) {
+    return createPostgresStore();
+  }
+
+  if (MONGODB_URI) {
+    return createMongoStore();
+  }
+
+  return Promise.resolve(createLocalStore());
+}
+
 function createApp() {
   const app = express();
-  const db = createDatabase();
+  const storePromise = createStore();
 
   app.use(cors());
   app.use(express.json({ limit: '10mb' }));
   app.use(express.static(__dirname));
 
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', database: DB_PATH });
+  app.get('/api/health', async (req, res) => {
+    try {
+      const store = await storePromise;
+      res.json({ status: 'ok', database: store.location, storage: store.type });
+    } catch {
+      res.status(500).json({ status: 'error', error: 'Erro ao conectar no banco' });
+    }
   });
 
-  app.get('/api/state', (req, res) => {
-    db.findOne({ _id: 'app_state' }, (err, record) => {
-      if (err) {
-        return res.status(500).json({ error: 'Erro ao ler banco' });
-      }
-      const state = record || DEFAULT_STATE;
-      return res.json({
-        company: state.company || DEFAULT_STATE.company,
-        orders: Array.isArray(state.orders) ? state.orders : [],
-        cash: Array.isArray(state.cash) ? state.cash : [],
-        clients: Array.isArray(state.clients) ? state.clients : [],
-        products: Array.isArray(state.products) ? state.products : []
-      });
-    });
+  app.get('/api/state', async (req, res) => {
+    try {
+      const store = await storePromise;
+      return res.json(await store.getState());
+    } catch {
+      return res.status(500).json({ error: 'Erro ao ler banco' });
+    }
   });
 
-  app.put('/api/state', (req, res) => {
-    const payload = req.body || DEFAULT_STATE;
-    const clean = {
-      company: payload.company || DEFAULT_STATE.company,
-      orders: Array.isArray(payload.orders) ? payload.orders : [],
-      cash: Array.isArray(payload.cash) ? payload.cash : [],
-      clients: Array.isArray(payload.clients) ? payload.clients : [],
-      products: Array.isArray(payload.products) ? payload.products : []
-    };
-
-    db.update(
-      { _id: 'app_state' },
-      { _id: 'app_state', ...clean },
-      { upsert: true },
-      (err) => {
-        if (err) {
-          return res.status(500).json({ error: 'Erro ao salvar estado' });
-        }
-        return res.json(clean);
-      }
-    );
+  app.put('/api/state', async (req, res) => {
+    try {
+      const store = await storePromise;
+      return res.json(await store.saveState(req.body || DEFAULT_STATE));
+    } catch {
+      return res.status(500).json({ error: 'Erro ao salvar estado' });
+    }
   });
 
-  app.delete('/api/state', (req, res) => {
-    db.update(
-      { _id: 'app_state' },
-      { _id: 'app_state', ...DEFAULT_STATE },
-      { upsert: true },
-      (err) => {
-        if (err) {
-          return res.status(500).json({ error: 'Erro ao resetar estado' });
-        }
-        return res.json(DEFAULT_STATE);
-      }
-    );
+  app.delete('/api/state', async (req, res) => {
+    try {
+      const store = await storePromise;
+      return res.json(await store.resetState());
+    } catch {
+      return res.status(500).json({ error: 'Erro ao resetar estado' });
+    }
   });
 
   app.get('*', (req, res) => {

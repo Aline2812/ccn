@@ -1,8 +1,24 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+process.env.CCN_DATA_DIR = path.join(os.tmpdir(), `ccn-api-test-${process.pid}`);
+
 const { createApp } = require('../server');
 
 const app = createApp();
+let server;
+
+test.before(() => {
+  server = app.listen(4100, '127.0.0.1');
+});
+
+test.after(() => {
+  server.close();
+  fs.rmSync(process.env.CCN_DATA_DIR, { recursive: true, force: true });
+});
 
 test('GET /api/health retorna status ok', async () => {
   const response = await fetch('http://127.0.0.1:4100/api/health', { method: 'GET' });
@@ -78,13 +94,3 @@ test('PUT /api/state salva os dados no banco', async () => {
   assert.equal(body.company.name, 'CCN SOLUÇÕES TECNOLÓGICAS');
   assert.equal(body.orders.length, 1);
 });
-
-(async () => {
-  const server = app.listen(4100, '127.0.0.1');
-  const close = () => server.close();
-  process.on('exit', close);
-  process.on('SIGINT', () => {
-    close();
-    process.exit(0);
-  });
-})();
