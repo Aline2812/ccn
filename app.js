@@ -357,10 +357,10 @@ function setView(view) {
 
   const titles = {
     dashboard: "ACOMPANHAMENTO DE CONTROLE",
-    orders: "Ordens de servico",
-    cash: "Caixa",
-    clients: "Cadastro de cliente",
-    products: "Cadastro de produto",
+    orders: "ORDEM DE SERVIÇO",
+    cash: "CAIXA",
+    clients: "CADASTRO DE CLIENTES",
+    products: "CADASTRO DE PRODUTOS",
     settings: "Empresa"
   };
   els.pageTitle.textContent = titles[view];
