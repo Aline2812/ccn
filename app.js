@@ -356,7 +356,7 @@ function setView(view) {
   });
 
   const titles = {
-    dashboard: "Painel",
+    dashboard: "ACOMPANHAMENTO DE CONTROLE",
     orders: "Ordens de servico",
     cash: "Caixa",
     clients: "Cadastro de cliente",

@@ -595,10 +595,13 @@ dialog::backdrop {
     padding: 18px;
   }
 
-  .stats-grid,
   .split-layout,
   .cash-layout {
     grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
