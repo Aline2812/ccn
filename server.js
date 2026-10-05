@@ -18,6 +18,8 @@ const POSTGRES_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || 'ccn';
 const STATE_ID = 'app_state';
+const DEFAULT_IMEI_CHECK_URL = 'https://www.consultaserialaparelho.com.br/public-web/homeSiga?token=20260618';
+const IMEI_CHECK_URL = process.env.IMEI_CHECK_URL || DEFAULT_IMEI_CHECK_URL;
 
 const DEFAULT_STATE = {
   company: {
@@ -61,6 +63,219 @@ function cleanState(payload = DEFAULT_STATE) {
     clients: Array.isArray(payload.clients) ? payload.clients : [],
     products: Array.isArray(payload.products) ? payload.products : []
   };
+}
+
+function buildImeiCheckUrl(imei) {
+  if (!IMEI_CHECK_URL) return '';
+  if (IMEI_CHECK_URL.includes('{imei}')) {
+    return IMEI_CHECK_URL.replaceAll('{imei}', encodeURIComponent(imei));
+  }
+
+  const url = new URL(IMEI_CHECK_URL);
+  if (!url.searchParams.has('imei')) {
+    url.searchParams.set('imei', imei);
+  }
+  return url.toString();
+}
+
+function isCaptchaPage(payload = '') {
+  return /recaptcha|g-recaptcha|nao sou um robo|não sou um robô/i.test(stripHtml(payload)) || /recaptcha|g-recaptcha/i.test(String(payload));
+}
+
+function captchaRequiredError(imei) {
+  const error = new Error('O site oficial exige confirmacao reCAPTCHA. Clique em Abrir consulta oficial, confirme o captcha e conclua a consulta no site.');
+  error.captchaRequired = true;
+  error.queryUrl = buildImeiCheckUrl(imei);
+  return error;
+}
+
+function htmlDecode(value = '') {
+  return String(value)
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#034;', '"')
+    .replaceAll('&#039;', "'")
+    .replaceAll('&apos;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&');
+}
+
+function stripHtml(value = '') {
+  return htmlDecode(String(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getSetCookies(headers) {
+  if (typeof headers.getSetCookie === 'function') return headers.getSetCookie();
+  const cookie = headers.get('set-cookie');
+  return cookie ? [cookie] : [];
+}
+
+function mergeCookies(cookieJar, headers) {
+  getSetCookies(headers).forEach((cookie) => {
+    const [pair] = cookie.split(';');
+    const index = pair.indexOf('=');
+    if (index > 0) {
+      cookieJar.set(pair.slice(0, index), pair.slice(index + 1));
+    }
+  });
+}
+
+function cookieHeader(cookieJar) {
+  return [...cookieJar.entries()].map(([name, value]) => `${name}=${value}`).join('; ');
+}
+
+function matchFirst(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return htmlDecode(match[1]);
+  }
+  return '';
+}
+
+function extractImeiResult(payload) {
+  const update = payload.match(/<update[^>]+id="tableTACResult"[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/update>/i);
+  const html = update ? update[1] : payload;
+  const tbody = html.match(/<tbody[^>]*id=["']tableTACResult_data["'][^>]*>([\s\S]*?)<\/tbody>/i)?.[1] || html;
+  const rows = [...tbody.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map((row) => [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((cell) => stripHtml(cell[1])).filter(Boolean))
+    .filter((cells) => cells.length);
+
+  const dataRow = rows.find((cells) => cells.length >= 2 && !cells.join(' ').includes('ui-datatable-empty-message'));
+  if (dataRow) {
+    const [imei, result, searchDate, accountable] = dataRow;
+    return [
+      imei ? `IMEI: ${imei}` : '',
+      result ? `Resultado: ${result}` : '',
+      searchDate ? `Data da consulta: ${searchDate}` : '',
+      accountable ? `Responsavel: ${accountable}` : ''
+    ].filter(Boolean).join(' | ');
+  }
+
+  const messages = [...payload.matchAll(/<message[^>]*>([\s\S]*?)<\/message>/gi)]
+    .map((message) => stripHtml(message[1]))
+    .filter(Boolean);
+  if (messages.length) return messages.join(' | ');
+
+  const text = stripHtml(payload);
+  return text || 'Consulta concluida, mas o site nao retornou resultado detalhado.';
+}
+
+async function checkImeiOnPublicWeb(imei, signal) {
+  const cookieJar = new Map();
+  const homeUrl = new URL(IMEI_CHECK_URL);
+  const homeResponse = await fetch(homeUrl, {
+    method: 'GET',
+    headers: { Accept: 'text/html' },
+    signal
+  });
+  mergeCookies(cookieJar, homeResponse.headers);
+
+  const homeHtml = await homeResponse.text();
+  if (!homeResponse.ok) {
+    throw new Error('Servico de consulta IMEI retornou erro ao abrir a pagina.');
+  }
+  if (isCaptchaPage(homeHtml)) {
+    throw captchaRequiredError(imei);
+  }
+
+  const formName = matchFirst(homeHtml, [
+    /<form[^>]+id=["']([^"']+)["'][^>]*>\s*<input[^>]+name=["']\1["']/i,
+    /<form[^>]+name=["']([^"']+)["']/i
+  ]) || 'j_idt8';
+  const action = matchFirst(homeHtml, [/<form[^>]+id=["']j_idt8["'][^>]+action=["']([^"']+)["']/i, /<form[^>]+action=["']([^"']+)["']/i]);
+  const viewState = matchFirst(homeHtml, [/name=["']javax\.faces\.ViewState["'][^>]+value=["']([^"']+)["']/i]);
+
+  if (!viewState) {
+    throw new Error('Nao foi possivel preparar a consulta IMEI no site.');
+  }
+
+  const postUrl = action ? new URL(action, homeUrl).toString() : homeUrl.toString();
+  const body = new URLSearchParams({
+    [formName]: formName,
+    imeiInput: imei,
+    btnSearchTAC: 'btnSearchTAC',
+    'javax.faces.ViewState': viewState,
+    'javax.faces.partial.ajax': 'true',
+    'javax.faces.source': 'btnSearchTAC',
+    'javax.faces.partial.execute': 'imeiInput btnSearchTAC',
+    'javax.faces.partial.render': 'tableTACResult imeiInput'
+  });
+
+  const searchResponse = await fetch(postUrl, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/xml,text/xml,*/*',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Faces-Request': 'partial/ajax',
+      Referer: homeUrl.toString(),
+      Cookie: cookieHeader(cookieJar)
+    },
+    body,
+    signal
+  });
+  mergeCookies(cookieJar, searchResponse.headers);
+
+  const searchPayload = await searchResponse.text();
+  if (!searchResponse.ok) {
+    throw new Error('Servico de consulta IMEI retornou erro na pesquisa.');
+  }
+  if (isCaptchaPage(searchPayload)) {
+    throw captchaRequiredError(imei);
+  }
+
+  return extractImeiResult(searchPayload);
+}
+
+async function checkImeiWithConfiguredUrl(imei, signal) {
+  const configuredUrl = new URL(IMEI_CHECK_URL);
+
+  if (configuredUrl.hostname.includes('consultaserialaparelho.com.br')) {
+    return checkImeiOnPublicWeb(imei, signal);
+  }
+
+  const response = await fetch(buildImeiCheckUrl(imei), {
+    method: 'GET',
+    headers: { Accept: 'application/json,text/plain,text/html' },
+    signal
+  });
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    throw new Error('Servico de consulta IMEI retornou erro.');
+  }
+
+  return summarizeImeiResult(payload);
+}
+
+function summarizeImeiResult(payload) {
+  if (payload === null || payload === undefined) return '';
+
+  if (typeof payload === 'string') {
+    return payload.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+  }
+
+  const preferredKeys = [
+    'result',
+    'resultado',
+    'status',
+    'message',
+    'mensagem',
+    'restriction',
+    'restricao',
+    'situation',
+    'situacao'
+  ];
+  const parts = preferredKeys
+    .filter((key) => payload[key] !== undefined && payload[key] !== null && payload[key] !== '')
+    .map((key) => `${key}: ${typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key]}`);
+
+  return (parts.length ? parts.join(' | ') : JSON.stringify(payload)).slice(0, 2000);
 }
 
 function createLocalStore() {
@@ -224,6 +439,63 @@ function createApp() {
       return res.json(await store.saveState(req.body || DEFAULT_STATE));
     } catch {
       return res.status(500).json({ error: 'Erro ao salvar estado' });
+    }
+  });
+
+  app.get('/api/imei-check', async (req, res) => {
+    const imei = String(req.query.imei || '').replace(/\D/g, '');
+
+    if (!/^\d{15}$/.test(imei)) {
+      return res.status(400).json({ error: 'Informe um IMEI com 15 digitos.' });
+    }
+
+    if (!IMEI_CHECK_URL) {
+      return res.status(501).json({ error: 'Link de consulta IMEI nao configurado.' });
+    }
+
+    try {
+      new URL(IMEI_CHECK_URL);
+    } catch {
+      return res.status(500).json({ error: 'Link de consulta IMEI invalido.' });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      return res.json({
+        imei,
+        result: await checkImeiWithConfiguredUrl(imei, controller.signal)
+      });
+    } catch (error) {
+      if (error.captchaRequired) {
+        return res.status(409).json({
+          error: error.message,
+          captchaRequired: true,
+          queryUrl: error.queryUrl
+        });
+      }
+
+      const message = error.name === 'AbortError'
+        ? 'Tempo esgotado ao consultar IMEI.'
+        : (error.message || 'Nao foi possivel consultar o servico de IMEI.');
+      return res.status(502).json({ error: message });
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+
+  app.get('/api/imei-check-page', (req, res) => {
+    const imei = String(req.query.imei || '').replace(/\D/g, '');
+
+    if (!/^\d{15}$/.test(imei)) {
+      return res.status(400).send('Informe um IMEI com 15 digitos.');
+    }
+
+    try {
+      return res.redirect(buildImeiCheckUrl(imei));
+    } catch {
+      return res.status(500).send('Link de consulta IMEI invalido.');
     }
   });
 

@@ -1,5 +1,7 @@
 const STORAGE_KEY = "assistencia_os_caixa_v1";
-const API_BASE = window.location.protocol === "file:" ? "" : window.location.origin;
+const LOCAL_API_BASE = "http://localhost:3000";
+const API_BASE = window.location.protocol === "file:" ? LOCAL_API_BASE : window.location.origin;
+const OFFICIAL_IMEI_CHECK_URL = "https://www.consultaserialaparelho.com.br/public-web/homeSiga?token=20260618&lang=pt_BR&locale=pt_BR&hl=pt-BR";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -112,6 +114,8 @@ const els = {
   deviceType: document.querySelector("#deviceType"),
   deviceModel: document.querySelector("#deviceModel"),
   deviceSerial: document.querySelector("#deviceSerial"),
+  imeiCheckResult: document.querySelector("#imeiCheckResult"),
+  openImeiCheckButton: document.querySelector("#openImeiCheckButton"),
   devicePassword: document.querySelector("#devicePassword"),
   reportedIssue: document.querySelector("#reportedIssue"),
   diagnosis: document.querySelector("#diagnosis"),
@@ -158,6 +162,8 @@ function bindEvents() {
   els.printOrderButton.addEventListener("click", printCurrentOrder);
   els.dueDate.addEventListener("input", maskBrazilianDate);
   els.dueDate.addEventListener("blur", normalizeBrazilianDateInput);
+  els.deviceSerial.addEventListener("input", handleImeiInput);
+  els.openImeiCheckButton.addEventListener("click", openOfficialImeiCheck);
   els.orderSearch.addEventListener("input", renderOrders);
   els.statusFilter.addEventListener("change", renderOrders);
   els.cashType.addEventListener("change", syncCashCategory);
@@ -444,6 +450,7 @@ function renderOrders() {
         order.deviceType,
         order.deviceModel,
         order.deviceSerial,
+        order.imeiCheckResult,
         order.reportedIssue
       ].join(" "));
       return haystack.includes(query);
@@ -462,6 +469,8 @@ function renderOrders() {
         </header>
         <div class="order-meta">
           <span>${escapeHtml(order.deviceType)} ${escapeHtml(order.deviceModel)}</span>
+          ${order.deviceSerial ? `<span>IMEI: ${escapeHtml(order.deviceSerial)}</span>` : ""}
+          ${order.imeiCheckResult ? `<span>Consulta IMEI: ${escapeHtml(shortText(order.imeiCheckResult, 90))}</span>` : ""}
           <span>Telefone: ${escapeHtml(order.clientPhone)}</span>
           ${order.clientMessagePhone ? `<span>Recado: ${escapeHtml(order.clientMessagePhone)}</span>` : ""}
           ${Number(order.depositAmount || 0) > 0 ? `<span>Sinal: ${money.format(Number(order.depositAmount))}</span>` : ""}
@@ -759,6 +768,7 @@ function openOrderDialog(id = null) {
     els.deviceType.value = order.deviceType;
     els.deviceModel.value = order.deviceModel;
     els.deviceSerial.value = order.deviceSerial;
+    els.imeiCheckResult.value = order.imeiCheckResult || "";
     els.devicePassword.value = order.devicePassword;
     els.reportedIssue.value = order.reportedIssue;
     els.diagnosis.value = order.diagnosis;
@@ -778,6 +788,7 @@ function openOrderDialog(id = null) {
     els.orderCodeLabel.textContent = "Nova OS";
     els.entryDateDisplay.value = formatDate(toDateInput(new Date()));
     els.orderStatus.value = "Entrada";
+    els.imeiCheckResult.value = "";
     els.depositAmount.value = 0;
     els.warrantyEnabled.value = "sim";
     els.warrantyDays.value = 90;
@@ -840,6 +851,14 @@ function calculateDialogTotal() {
   els.orderTotal.textContent = money.format(total);
 }
 
+function handleImeiInput() {
+  els.deviceSerial.value = normalizeImei(els.deviceSerial.value);
+}
+
+function openOfficialImeiCheck() {
+  window.open(OFFICIAL_IMEI_CHECK_URL, "_blank", "noopener");
+}
+
 function saveOrderFromForm(event) {
   event.preventDefault();
   const now = new Date();
@@ -859,6 +878,8 @@ function saveOrderFromForm(event) {
     deviceType: els.deviceType.value,
     deviceModel: els.deviceModel.value.trim(),
     deviceSerial: els.deviceSerial.value.trim(),
+    imeiCheckResult: els.imeiCheckResult.value.trim(),
+    imeiCheckedAt: els.imeiCheckResult.value.trim() ? new Date().toISOString() : "",
     devicePassword: els.devicePassword.value.trim(),
     reportedIssue: els.reportedIssue.value.trim(),
     diagnosis: els.diagnosis.value.trim(),
@@ -931,7 +952,8 @@ function buildReceiptHtml(order) {
     ${order.clientAddress ? `<p><span class="receipt-label">Endereco:</span> ${escapeHtml(order.clientAddress)}</p>` : ""}
     <div class="receipt-line"></div>
     <p><span class="receipt-label">Equip.:</span> ${escapeHtml(order.deviceType)} ${escapeHtml(order.deviceModel)}</p>
-    ${order.deviceSerial ? `<p><span class="receipt-label">Serial/IMEI:</span> ${escapeHtml(order.deviceSerial)}</p>` : ""}
+    ${order.deviceSerial ? `<p><span class="receipt-label">IMEI DO CELULAR:</span> ${escapeHtml(order.deviceSerial)}</p>` : ""}
+    ${order.imeiCheckResult ? `<p><span class="receipt-label">Consulta IMEI:</span> ${escapeHtml(order.imeiCheckResult)}</p>` : ""}
     ${order.devicePassword ? `<p><span class="receipt-label">Senha:</span> ${escapeHtml(order.devicePassword)}</p>` : ""}
     <div class="receipt-line"></div>
     <p><span class="receipt-label">Defeito:</span></p>
@@ -1255,6 +1277,16 @@ function parseBrazilianDate(value) {
 
 function normalize(value) {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeImei(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 15);
+}
+
+function shortText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function statusClass(status) {

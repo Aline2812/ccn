@@ -1,22 +1,37 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
 process.env.CCN_DATA_DIR = path.join(os.tmpdir(), `ccn-api-test-${process.pid}`);
+process.env.IMEI_CHECK_URL = 'http://127.0.0.1:4101/public-web/homeSiga?token=20260618';
 
 const { createApp } = require('../server');
 
 const app = createApp();
 let server;
+let imeiServer;
 
-test.before(() => {
-  server = app.listen(4100, '127.0.0.1');
+test.before(async () => {
+  await new Promise((resolve) => {
+    server = app.listen(4100, '127.0.0.1', resolve);
+  });
+  await new Promise((resolve) => {
+  imeiServer = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1:4101');
+    assert.equal(url.searchParams.get('token'), '20260618');
+    assert.equal(url.searchParams.get('imei'), '123456789012345');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ resultado: 'Sem restricao localizada' }));
+    }).listen(4101, '127.0.0.1', resolve);
+  });
 });
 
-test.after(() => {
-  server.close();
+test.after(async () => {
+  await new Promise((resolve) => server.close(resolve));
+  await new Promise((resolve) => imeiServer.close(resolve));
   fs.rmSync(process.env.CCN_DATA_DIR, { recursive: true, force: true });
 });
 
@@ -47,7 +62,8 @@ test('PUT /api/state salva os dados no banco', async () => {
         clientAddress: 'Endereco teste',
         deviceType: 'Celular',
         deviceModel: 'Samsung A10',
-        deviceSerial: 'ABC123',
+        deviceSerial: '123456789012345',
+        imeiCheckResult: 'Sem restricao localizada',
         devicePassword: '',
         reportedIssue: 'Tela quebrada',
         diagnosis: 'Troca de tela',
@@ -93,4 +109,13 @@ test('PUT /api/state salva os dados no banco', async () => {
   const body = await response.json();
   assert.equal(body.company.name, 'CCN SOLUÇÕES TECNOLÓGICAS');
   assert.equal(body.orders.length, 1);
+  assert.equal(body.orders[0].imeiCheckResult, 'Sem restricao localizada');
+});
+
+test('GET /api/imei-check consulta o link configurado', async () => {
+  const response = await fetch('http://127.0.0.1:4100/api/imei-check?imei=123456789012345');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.imei, '123456789012345');
+  assert.equal(body.result, 'resultado: Sem restricao localizada');
 });

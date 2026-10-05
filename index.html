@@ -482,9 +482,16 @@
             <input id="deviceModel" required>
           </label>
           <label>
-            Serial/IMEI
-            <input id="deviceSerial">
+            IMEI DO CELULAR
+            <input id="deviceSerial" inputmode="numeric" maxlength="17" autocomplete="off">
           </label>
+          <label class="wide">
+            Resultado da consulta IMEI
+            <textarea id="imeiCheckResult" rows="3" placeholder="Preencha manualmente o resultado da consulta IMEI."></textarea>
+          </label>
+          <div class="wide imei-actions">
+            <button class="ghost-button" id="openImeiCheckButton" type="button">Abrir consulta oficial</button>
+          </div>
           <label>
             Senha/padrao
             <input id="devicePassword">
