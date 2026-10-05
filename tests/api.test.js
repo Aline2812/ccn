@@ -119,3 +119,25 @@ test('GET /api/imei-check consulta o link configurado', async () => {
   assert.equal(body.imei, '123456789012345');
   assert.equal(body.result, 'resultado: Sem restricao localizada');
 });
+
+test('POST /api/whatsapp/status-update informa quando WhatsApp nao esta configurado', async () => {
+  const response = await fetch('http://127.0.0.1:4100/api/whatsapp/status-update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      order: {
+        code: 'OS-2026-0001',
+        clientName: 'Cliente Teste',
+        clientWhatsapp: '11999999999',
+        deviceType: 'Celular',
+        deviceModel: 'Samsung A10',
+        status: 'Aguardando peca'
+      }
+    })
+  });
+
+  assert.equal(response.status, 501);
+  const body = await response.json();
+  assert.equal(body.enabled, false);
+  assert.match(body.whatsappWebUrl, /^https:\/\/wa\.me\/5511999999999\?text=/);
+});

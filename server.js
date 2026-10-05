@@ -20,6 +20,9 @@ const MONGODB_DB = process.env.MONGODB_DB || 'ccn';
 const STATE_ID = 'app_state';
 const DEFAULT_IMEI_CHECK_URL = 'https://www.consultaserialaparelho.com.br/public-web/homeSiga?token=20260618';
 const IMEI_CHECK_URL = process.env.IMEI_CHECK_URL || DEFAULT_IMEI_CHECK_URL;
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
 const DEFAULT_STATE = {
   company: {
@@ -278,6 +281,75 @@ function summarizeImeiResult(payload) {
   return (parts.length ? parts.join(' | ') : JSON.stringify(payload)).slice(0, 2000);
 }
 
+function normalizeWhatsappPhone(value = '') {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+function statusMessage(order) {
+  const statusMessages = {
+    Entrada: 'Sua ordem de servico foi registrada e esta em analise.',
+    Orcamento: 'Sua ordem de servico esta em orcamento.',
+    Aprovado: 'Seu conserto foi aprovado e seguira para atendimento.',
+    'Em reparo': 'Seu aparelho esta em reparo.',
+    'Aguardando peca': 'Sua ordem de servico esta aguardando peca.',
+    'Aguardando retirada': 'Seu aparelho esta aguardando retirada.',
+    Finalizado: 'Seu conserto foi finalizado.',
+    Cancelado: 'O conserto foi cancelado.'
+  };
+
+  const device = [order.deviceType, order.deviceModel].filter(Boolean).join(' ');
+  return [
+    `Ola, ${order.clientName || 'cliente'}!`,
+    '',
+    `Atualizacao da OS ${order.code || ''}: ${order.status || ''}.`,
+    statusMessages[order.status] || 'Sua ordem de servico foi atualizada.',
+    device ? `Aparelho: ${device}.` : '',
+    '',
+    'CCN Solucoes Tecnologicas'
+  ].filter((line) => line !== '').join('\n');
+}
+
+function whatsappWebUrl(to, message) {
+  return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
+}
+
+async function sendWhatsappText(to, body) {
+  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+    return { enabled: false };
+  }
+
+  const response = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body
+      }
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error = new Error(payload.error?.message || 'Nao foi possivel enviar mensagem pelo WhatsApp.');
+    error.status = response.status;
+    throw error;
+  }
+
+  return { enabled: true, payload };
+}
+
 function createLocalStore() {
   const db = createDatabase();
 
@@ -496,6 +568,34 @@ function createApp() {
       return res.redirect(buildImeiCheckUrl(imei));
     } catch {
       return res.status(500).send('Link de consulta IMEI invalido.');
+    }
+  });
+
+  app.post('/api/whatsapp/status-update', async (req, res) => {
+    const order = req.body?.order || {};
+    const to = normalizeWhatsappPhone(order.clientWhatsapp || order.clientPhone);
+
+    if (!to) {
+      return res.status(400).json({ error: 'Informe o WhatsApp do cliente.' });
+    }
+
+    try {
+      const message = statusMessage(order);
+      const result = await sendWhatsappText(to, message);
+
+      if (result.enabled === false) {
+        return res.status(501).json({
+          enabled: false,
+          error: 'WhatsApp da loja nao configurado. Abrindo WhatsApp Web com a mensagem pronta.',
+          whatsappWebUrl: whatsappWebUrl(to, message)
+        });
+      }
+
+      return res.json({ enabled: true, sent: true });
+    } catch (error) {
+      return res.status(error.status || 502).json({
+        error: error.message || 'Nao foi possivel enviar mensagem pelo WhatsApp.'
+      });
     }
   });
 

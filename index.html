@@ -249,8 +249,8 @@
                 <input id="clientCpfInput">
               </label>
               <label>
-                WhatsApp / Recado
-                <input id="clientMessagePhoneInput">
+                WhatsApp do cliente
+                <input id="clientMessagePhoneInput" inputmode="tel" placeholder="Ex: 11999999999">
               </label>
               <label class="wide">
                 Endereco
@@ -460,8 +460,8 @@
             <datalist id="clientSuggestionsCpf"></datalist>
           </label>
           <label>
-            Recado / WhatsApp
-            <input id="clientMessagePhone">
+            WhatsApp do cliente
+            <input id="clientMessagePhone" inputmode="tel" placeholder="Ex: 11999999999">
           </label>
           <label>
             Endereco
@@ -570,6 +570,7 @@
           </div>
           <div class="footer-actions">
             <button class="danger-button" id="deleteOrderButton" type="button">Excluir</button>
+            <button class="ghost-button" id="sendWhatsAppButton" type="button">Enviar WhatsApp</button>
             <button class="ghost-button" id="printOrderButton" type="button">Imprimir</button>
             <button class="primary-button" id="saveOrderButton" type="submit">Salvar OS</button>
           </div>

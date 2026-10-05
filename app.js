@@ -75,6 +75,7 @@ const els = {
   newOrderButtonToolbar: document.querySelector("#newOrderButtonToolbar"),
   deleteOrderButton: document.querySelector("#deleteOrderButton"),
   printOrderButton: document.querySelector("#printOrderButton"),
+  sendWhatsAppButton: document.querySelector("#sendWhatsAppButton"),
   addItemButton: document.querySelector("#addItemButton"),
   itemsList: document.querySelector("#itemsList"),
   itemTemplate: document.querySelector("#itemTemplate"),
@@ -160,6 +161,7 @@ function bindEvents() {
   els.orderForm.addEventListener("submit", saveOrderFromForm);
   els.deleteOrderButton.addEventListener("click", deleteCurrentOrder);
   els.printOrderButton.addEventListener("click", printCurrentOrder);
+  els.sendWhatsAppButton.addEventListener("click", sendCurrentOrderWhatsApp);
   els.dueDate.addEventListener("input", maskBrazilianDate);
   els.dueDate.addEventListener("blur", normalizeBrazilianDateInput);
   els.deviceSerial.addEventListener("input", handleImeiInput);
@@ -859,11 +861,12 @@ function openOfficialImeiCheck() {
   window.open(OFFICIAL_IMEI_CHECK_URL, "_blank", "noopener");
 }
 
-function saveOrderFromForm(event) {
+async function saveOrderFromForm(event) {
   event.preventDefault();
   const now = new Date();
   const items = readItemsFromDialog();
   const previousOrder = state.orders.find((item) => item.id === editingOrderId);
+  const previousStatus = previousOrder?.status || "";
   const order = {
     id: previousOrder?.id || crypto.randomUUID(),
     code: previousOrder?.code || nextOrderCode(),
@@ -900,9 +903,113 @@ function saveOrderFromForm(event) {
     state.orders.push(order);
   }
 
-  persist();
+  await persist();
+  await notifyOrderStatusChange(order, previousStatus);
   els.orderDialog.close();
   render();
+}
+
+async function notifyOrderStatusChange(order, previousStatus) {
+  if (!previousStatus || previousStatus === order.status || !API_BASE) return;
+
+  const whatsapp = order.clientMessagePhone || order.clientPhone;
+  if (!whatsapp) {
+    alert("OS salva, mas o cliente nao tem WhatsApp cadastrado para receber a atualizacao.");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/whatsapp/status-update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order: {
+          code: order.code,
+          clientName: order.clientName,
+          clientWhatsapp: whatsapp,
+          deviceType: order.deviceType,
+          deviceModel: order.deviceModel,
+          status: order.status,
+          previousStatus
+        }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || payload.enabled === false) {
+      if (payload.whatsappWebUrl) {
+        window.open(payload.whatsappWebUrl, "_blank", "noopener");
+        return;
+      }
+
+      alert(payload.error || "OS salva, mas o WhatsApp da loja ainda nao esta configurado para envio automatico.");
+    }
+  } catch {
+    openWhatsAppWebForOrder(order);
+  }
+}
+
+function readOrderDraftFromForm() {
+  return {
+    code: document.querySelector("#orderCodeLabel")?.textContent || "OS",
+    clientName: els.clientName.value.trim(),
+    clientPhone: els.clientPhone.value.trim(),
+    clientWhatsapp: els.clientMessagePhone.value.trim() || els.clientPhone.value.trim(),
+    deviceType: els.deviceType.value,
+    deviceModel: els.deviceModel.value.trim(),
+    status: els.orderStatus.value
+  };
+}
+
+function sendCurrentOrderWhatsApp() {
+  openWhatsAppWebForOrder(readOrderDraftFromForm());
+}
+
+function openWhatsAppWebForOrder(order) {
+  const phone = normalizeWhatsappPhone(order.clientWhatsapp || order.clientMessagePhone || order.clientPhone);
+
+  if (!phone) {
+    alert("Informe o WhatsApp do cliente antes de enviar a mensagem.");
+    return;
+  }
+
+  window.open(whatsappWebUrl(phone, orderStatusMessage(order)), "_blank", "noopener");
+}
+
+function whatsappWebUrl(phone, message) {
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function normalizeWhatsappPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("55")) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+function orderStatusMessage(order) {
+  const statusMessages = {
+    Entrada: "Sua ordem de servico foi registrada e esta em analise.",
+    Orcamento: "Sua ordem de servico esta em orcamento.",
+    Aprovado: "Seu conserto foi aprovado e seguira para atendimento.",
+    "Em reparo": "Seu aparelho esta em reparo.",
+    "Aguardando peca": "Sua ordem de servico esta aguardando peca.",
+    "Aguardando retirada": "Seu aparelho esta aguardando retirada.",
+    Finalizado: "Seu conserto foi finalizado.",
+    Cancelado: "O conserto foi cancelado."
+  };
+  const device = [order.deviceType, order.deviceModel].filter(Boolean).join(" ");
+
+  return [
+    `Ola, ${order.clientName || "cliente"}!`,
+    "",
+    `Atualizacao da ${order.code || "OS"}: ${order.status || ""}.`,
+    statusMessages[order.status] || "Sua ordem de servico foi atualizada.",
+    device ? `Aparelho: ${device}.` : "",
+    "",
+    "CCN Solucoes Tecnologicas"
+  ].filter((line) => line !== "").join("\n");
 }
 
 function deleteCurrentOrder() {

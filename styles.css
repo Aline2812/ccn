@@ -23,8 +23,7 @@ body {
   min-height: 100vh;
   color: var(--ink);
   background:
-    linear-gradient(135deg, rgba(18, 108, 90, 0.08), transparent 35%),
-    radial-gradient(circle at 90% 10%, rgba(190, 107, 0, 0.1), transparent 28%),
+    linear-gradient(135deg, rgba(16, 16, 16, 0.88), rgba(43, 10, 10, 0.92)),
     var(--bg);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -131,6 +130,14 @@ button {
 .workspace {
   min-width: 0;
   padding: 28px;
+  background-color: #171011;
+  background-image:
+    linear-gradient(rgba(10, 10, 10, 0.34), rgba(10, 10, 10, 0.34)),
+    radial-gradient(circle at 18% 20%, rgba(190, 107, 0, 0.22), transparent 20%),
+    radial-gradient(circle at 88% 12%, rgba(180, 35, 24, 0.24), transparent 24%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170' viewBox='0 0 170 170'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.18' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M46 56c0-21 17-36 39-36s39 15 39 36c0 15-8 25-18 31v16H64V87c-10-6-18-16-18-31z'/%3E%3Ccircle cx='71' cy='60' r='8'/%3E%3Ccircle cx='99' cy='60' r='8'/%3E%3Cpath d='M85 73l-6 11h12zM70 103v18M85 103v22M100 103v18M35 128l22-22M57 128l-22-22M113 128l22-22M135 128l-22-22M26 42l16-10-8 20 18-7M130 38l18-7-9 18 19-5'/%3E%3C/g%3E%3Cg fill='%23be6b00' fill-opacity='.28'%3E%3Cpath d='M31 19l14 4-11 9 4 15-13-8-13 8 4-15-11-9 14-4 6-13zM137 112l11 3-8 7 3 12-10-6-10 6 3-12-8-7 11-3 4-10z'/%3E%3C/g%3E%3C/svg%3E");
+  background-position: center, left top, right top, 0 0;
+  background-size: auto, auto, auto, 170px 170px;
 }
 
 .topbar {
@@ -139,6 +146,16 @@ button {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.workspace .topbar h1 {
+  color: #fff7ed;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+}
+
+.workspace .topbar .eyebrow {
+  color: #f6b35d;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 
 .eyebrow {
