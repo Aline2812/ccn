@@ -1,4 +1,3 @@
-const STORAGE_KEY = "assistencia_os_caixa_v1";
 const LOCAL_API_BASE = "http://localhost:3000";
 const API_BASE = window.location.protocol === "file:" ? LOCAL_API_BASE : window.location.origin;
 const OFFICIAL_IMEI_CHECK_URL = "https://www.consultaserialaparelho.com.br/public-web/homeSiga?token=20260618&lang=pt_BR&locale=pt_BR&hl=pt-BR";
@@ -17,6 +16,7 @@ let state = {
 };
 let editingOrderId = null;
 let editingCashId = null;
+let savedStateJson = null;
 const FIXED_EXPENSES = ["Aluguel", "Luz", "Água", "Internet"];
 
 const els = {
@@ -144,10 +144,13 @@ const els = {
   pickupNotice: document.querySelector("#pickupNotice")
 };
 
+if (window.ccnAuth) window.ccnAuth.onLogin(boot);
 boot();
 
 async function boot() {
+  if (window.ccnAuth && !window.ccnAuth.isAuthenticated()) return;
   state = await loadState();
+  savedStateJson = JSON.stringify(state);
   state.cash.forEach((item) => {
     if (item.category === "GASTOS PARTICULAR") item.category = "Gasto Particular";
   });
@@ -158,6 +161,7 @@ async function boot() {
   fillCompanyForm();
   setView("dashboard");
   render();
+  if (window.ccnAuth) window.ccnAuth.showApp();
 }
 
 function bindEvents() {
@@ -316,46 +320,20 @@ function syncCreditFields() {
 }
 
 async function loadState() {
-  const fallback = {
-    company: defaultCompany(),
-    orders: [],
-    cash: [],
-    clients: [],
-    products: []
+  const response = await apiFetch(`${API_BASE}/api/state`);
+  if (!response.ok) throw new Error('Não foi possível carregar os dados do banco. Tente entrar novamente.');
+  const remote = await response.json();
+  return {
+    company: { ...defaultCompany(), ...remote.company },
+    orders: Array.isArray(remote.orders) ? remote.orders : [],
+    cash: Array.isArray(remote.cash) ? remote.cash : [],
+    clients: Array.isArray(remote.clients) ? remote.clients : [],
+    products: Array.isArray(remote.products) ? remote.products : []
   };
+}
 
-  if (API_BASE) {
-    try {
-      const response = await fetch(`${API_BASE}/api/state`);
-      if (response.ok) {
-        const remote = await response.json();
-        return {
-          company: { ...defaultCompany(), ...remote.company },
-          orders: Array.isArray(remote.orders) ? remote.orders : [],
-          cash: Array.isArray(remote.cash) ? remote.cash : [],
-          clients: Array.isArray(remote.clients) ? remote.clients : [],
-          products: Array.isArray(remote.products) ? remote.products : []
-        };
-      }
-    } catch {
-      // Fallback para localStorage quando a API não estiver disponível.
-    }
-  }
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!saved) return fallback;
-
-    return {
-      company: { ...defaultCompany(), ...saved.company },
-      orders: Array.isArray(saved.orders) ? saved.orders : [],
-      cash: Array.isArray(saved.cash) ? saved.cash : [],
-      clients: Array.isArray(saved.clients) ? saved.clients : [],
-      products: Array.isArray(saved.products) ? saved.products : []
-    };
-  } catch {
-    return fallback;
-  }
+function apiFetch(url, options) {
+  return window.ccnAuth ? window.ccnAuth.fetch(url, options) : fetch(url, options);
 }
 
 function defaultCompany() {
@@ -369,22 +347,23 @@ function defaultCompany() {
 }
 
 async function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-
-  if (!API_BASE) return;
-
   try {
-    const response = await fetch(`${API_BASE}/api/state`, {
+    const payload = JSON.stringify(state);
+    const response = await apiFetch(`${API_BASE}/api/state`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state)
+      body: payload
     });
 
     if (!response.ok) {
       throw new Error("API indisponivel");
     }
+    savedStateJson = payload;
+    return true;
   } catch {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (savedStateJson) state = JSON.parse(savedStateJson);
+    alert('Não foi possível confirmar o salvamento no banco. Os campos foram mantidos para você tentar novamente.');
+    return false;
   }
 }
 
@@ -710,7 +689,7 @@ function syncAutocompleteLists() {
   }
 }
 
-function saveClient(event) {
+async function saveClient(event) {
   event.preventDefault();
   const payload = {
     id: crypto.randomUUID(),
@@ -733,12 +712,12 @@ function saveClient(event) {
     state.clients.push(payload);
   }
 
-  persist();
+  if (await persist() === false) return;
   els.clientForm.reset();
   render();
 }
 
-function saveProduct(event) {
+async function saveProduct(event) {
   event.preventDefault();
   const payload = {
     id: crypto.randomUUID(),
@@ -763,7 +742,7 @@ function saveProduct(event) {
     state.products.push(payload);
   }
 
-  persist();
+  if (await persist() === false) return;
   els.productForm.reset();
   render();
 }
@@ -956,7 +935,7 @@ async function saveOrderFromForm(event) {
     state.orders.push(order);
   }
 
-  await persist();
+  if (await persist() === false) return;
   await notifyOrderStatusChange(order, previousStatus);
   els.orderDialog.close();
   render();
@@ -972,7 +951,7 @@ async function notifyOrderStatusChange(order, previousStatus) {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/api/whatsapp/status-update`, {
+    const response = await apiFetch(`${API_BASE}/api/whatsapp/status-update`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1065,14 +1044,14 @@ function orderStatusMessage(order) {
   ].filter((line) => line !== "").join("\n");
 }
 
-function deleteCurrentOrder() {
+async function deleteCurrentOrder() {
   if (!editingOrderId) return;
   const order = state.orders.find((item) => item.id === editingOrderId);
   const confirmed = confirm(`Excluir ${order.code}? Movimentos de caixa vinculados tambem serao removidos.`);
   if (!confirmed) return;
   state.orders = state.orders.filter((item) => item.id !== editingOrderId);
   state.cash = state.cash.filter((item) => item.orderId !== editingOrderId);
-  persist();
+  if (await persist() === false) return;
   els.orderDialog.close();
   render();
 }
@@ -1184,7 +1163,7 @@ function readItemsFromDialog() {
     .filter((item) => item.description || item.price > 0 || item.cost > 0);
 }
 
-function saveCashMovement(event) {
+async function saveCashMovement(event) {
   event.preventDefault();
   syncCashContext();
   if (!els.cashForm.reportValidity()) return;
@@ -1213,7 +1192,7 @@ function saveCashMovement(event) {
     state.cash.push(payload);
   }
 
-  persist();
+  if (await persist() === false) return;
   resetCashEditor();
   render();
 }
@@ -1229,7 +1208,7 @@ function fillCompanyForm() {
   els.companyNotes.value = company.notes;
 }
 
-function saveCompany(event) {
+async function saveCompany(event) {
   event.preventDefault();
   state.company = {
     name: els.companyName.value.trim(),
@@ -1238,7 +1217,7 @@ function saveCompany(event) {
     address: els.companyAddress.value.trim(),
     notes: els.companyNotes.value.trim()
   };
-  persist();
+  if (await persist() === false) return;
   alert("Dados da empresa salvos.");
 }
 
@@ -1324,7 +1303,7 @@ function importBackup(event) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const imported = JSON.parse(reader.result);
       if (!imported.orders || !imported.cash || !imported.company) {
@@ -1333,7 +1312,9 @@ function importBackup(event) {
       state.company = imported.company;
       state.orders = imported.orders;
       state.cash = imported.cash;
-      persist();
+      state.clients = Array.isArray(imported.clients) ? imported.clients : state.clients;
+      state.products = Array.isArray(imported.products) ? imported.products : state.products;
+      if (await persist() === false) return;
       fillCompanyForm();
       render();
       alert("Backup importado com sucesso.");

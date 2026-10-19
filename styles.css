@@ -18,6 +18,60 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(100%, 420px);
+  padding: 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.login-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.login-card h1 {
+  margin: 8px 0;
+  font-size: 26px;
+}
+
+.login-card > p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.login-card form {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.login-message {
+  color: var(--danger);
+  font-size: 14px;
+  margin: 0;
+}
+
+.login-message:empty {
+  display: none;
+}
+
 body {
   margin: 0;
   min-height: 100vh;

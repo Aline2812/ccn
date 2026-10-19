@@ -12,6 +12,7 @@ const Datastore = require('nedb');
 const { MongoClient } = require('mongodb');
 const { Pool } = require('pg');
 const { resolvePostgresUrl } = require('./postgres-config');
+const { createAuth } = require('./auth');
 
 const DATA_DIR = process.env.CCN_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app-state.db');
@@ -552,12 +553,31 @@ function createStore() {
 function createApp() {
   const app = express();
   const storePromise = createStore();
+  // Handle startup failure immediately, including before the first HTTP request.
+  storePromise.catch(() => {});
+  const auth = createAuth();
 
-  app.use(cors());
+  app.set('trust proxy', process.env.RENDER ? 1 : false);
+  app.use(cors({ origin: process.env.RENDER ? false : 'null' }));
   app.use(express.json({ limit: '10mb' }));
-  app.use(express.static(__dirname));
+  app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Referrer-Policy', 'same-origin');
+    res.set('X-Frame-Options', 'DENY');
+    next();
+  });
+  // Only public interface files are served. Never expose database or source files.
+  const assets = ['index.html', 'styles.css', 'app.js', 'login.js', 'dropdowns.js', 'logo.png.jpeg'];
+  app.get(['/', ...assets.map((name) => `/${name}`)], (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, req.path === '/' ? 'index.html' : req.path.slice(1)));
+  });
+  app.post('/api/login', auth.login);
+  app.post('/api/logout', auth.logout);
 
   app.get('/api/health', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
     try {
       const store = await storePromise;
       res.json({ status: 'ok', database: store.location, storage: store.type });
@@ -565,6 +585,8 @@ function createApp() {
       res.status(500).json({ status: 'error', error: 'Erro ao conectar no banco' });
     }
   });
+
+  app.use('/api', auth.requireLogin);
 
   app.get('/api/state', async (req, res) => {
     try {
@@ -678,8 +700,8 @@ function createApp() {
     }
   });
 
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+  app.use((req, res) => {
+    res.status(404).send('Página não encontrada.');
   });
 
   return app;

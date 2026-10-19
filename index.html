@@ -4,10 +4,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sistema de OS e Caixa - Assistencia Tecnica</title>
-    <link rel="stylesheet" href="styles.css?v=dropdown-below-2">
+    <link rel="stylesheet" href="styles.css?v=login-1">
   </head>
   <body>
-    <div class="app-shell">
+    <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
+      <div class="login-card">
+        <img src="logo.png.jpeg" class="login-logo" alt="CCN Soluções Tecnológicas">
+        <p class="eyebrow">CCN Soluções Tecnológicas</p>
+        <h1 id="loginTitle">Acesse o sistema</h1>
+        <p>Informe seu usuário e sua senha a cada abertura.</p>
+        <form id="loginForm" autocomplete="off">
+          <label>Usuário<input name="username" id="loginUsername" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100" required></label>
+          <label>Senha<input name="password" id="loginPassword" type="password" autocomplete="off" maxlength="256" required></label>
+          <p id="loginMessage" class="login-message" role="alert" aria-live="polite"></p>
+          <button class="primary-button" id="loginButton" type="submit">Entrar</button>
+        </form>
+      </div>
+    </section>
+    <noscript>Ative o JavaScript do navegador para entrar no sistema.</noscript>
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar">
         <div class="brand">
           <img class="brand-logo" src="logo.png.jpeg" alt="Logo da assistência técnica">
@@ -38,6 +53,7 @@
             <h1 id="pageTitle">ACOMPANHAMENTO DE CONTROLE</h1>
           </div>
           <div class="top-actions">
+            <button class="ghost-button" id="logoutButton" type="button">Sair</button>
             <button class="icon-button" id="backupButton" type="button" title="Exportar backup">⇩</button>
             <label class="icon-button file-button" title="Importar backup">
               ⇧
@@ -627,7 +643,8 @@
     <section id="receiptPrintArea" class="receipt-print" aria-hidden="true"></section>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js?v=personal-expenses-2"></script>
+    <script src="login.js?v=login-1"></script>
+    <script src="app.js?v=login-1"></script>
     <script src="dropdowns.js?v=dropdown-below-2"></script>
   </body>
 </html>

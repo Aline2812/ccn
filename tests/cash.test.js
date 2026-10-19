@@ -79,7 +79,7 @@ test('categorias fixas forçam saída e desativam custo', () => {
   }
 });
 
-test('salvar e editar mantém custo e recalcula lucro sem duplicar movimento', () => {
+test('salvar e editar mantém custo e recalcula lucro sem duplicar movimento', async () => {
   const { run, element } = loadApp();
   run('persist = () => {}; resetCashEditor = () => {}; render = () => {}');
   element('#cashType').value = 'entrada';
@@ -87,12 +87,12 @@ test('salvar e editar mantém custo e recalcula lucro sem duplicar movimento', (
   element('#cashAmount').value = '380';
   element('#cashCost').value = '120';
   element('#cashDescription').value = 'Troca da tela Samsung A80';
-  run('saveCashMovement({preventDefault() {}})');
+  await run('saveCashMovement({preventDefault() {}})');
   assert.equal(run('state.cash[0].cost'), 120);
   assert.equal(run('cashBalance()'), 260);
   run('editingCashId = state.cash[0].id');
   element('#cashCost').value = '150';
-  run('saveCashMovement({preventDefault() {}})');
+  await run('saveCashMovement({preventDefault() {}})');
   assert.equal(run('state.cash.length'), 1);
   assert.equal(run('cashBalance()'), 230);
 });
@@ -103,7 +103,7 @@ test('caixa permite prejuízo quando o custo supera o recebido', () => {
   assert.equal(run('cashBalance()'), -20);
 });
 
-test('cadastro salva custo separado do preço de venda', () => {
+test('cadastro salva custo separado do preço de venda', async () => {
   const { run, element } = loadApp();
   run('persist = () => {}; render = () => {}');
   element('#productForm').reset = () => {};
@@ -111,7 +111,7 @@ test('cadastro salva custo separado do preço de venda', () => {
   element('#productNameInput').value = 'Tela Samsung A80';
   element('#productCostInput').value = '120';
   element('#productPriceInput').value = '380';
-  run('saveProduct({preventDefault() {}})');
+  await run('saveProduct({preventDefault() {}})');
   assert.equal(run('state.products[0].cost'), 120);
   assert.equal(run('state.products[0].price'), 380);
 });
@@ -160,4 +160,45 @@ test('item de OS preenche custo ao digitar ou selecionar, preservando valores de
   listeners.get('change')();
   assert.equal(fields.get('.item-cost').value, '80.00');
   assert.equal(fields.get('.item-price').value, 0);
+});
+
+test('falha ao carregar dados bloqueia a abertura sem usar dados antigos do navegador', async () => {
+  const { run } = loadApp();
+  run(`globalThis.fetch = async () => ({ok: false});
+    globalThis.localStorage = {getItem() {throw new Error('Cache não deve ser usado');}};`);
+  await assert.rejects(run('loadState()'), /Não foi possível carregar/);
+});
+
+test('falha ao salvar avisa o usuário e restaura o último estado confirmado', async () => {
+  const { run } = loadApp();
+  run(`state.clients = [{name: 'Cliente salvo'}];
+    savedStateJson = JSON.stringify(state);
+    state.clients.push({name: 'Cliente não salvo'});
+    globalThis.fetch = async () => ({ok: false});
+    globalThis.messages = [];
+    globalThis.alert = message => messages.push(message);`);
+  assert.equal(await run('persist()'), false);
+  assert.equal(run('state.clients.length'), 1);
+  assert.match(run('messages[0]'), /Não foi possível confirmar/);
+});
+
+test('chamadas de dados usam o acesso autenticado', async () => {
+  const { run } = loadApp();
+  run(`window.ccnAuth = {fetch: async (url, options) => ({url, method: options.method})};`);
+  assert.equal((await run('apiFetch("/api/state", {method: "PUT"})')).method, 'PUT');
+});
+
+test('restauração de backup recupera clientes e produtos junto com ordens e caixa', async () => {
+  const { run } = loadApp();
+  run(`globalThis.backup = { company: {name: 'Empresa'}, orders: [], cash: [],
+      clients: [{name: 'Cliente restaurado'}], products: [{name: 'Tela', cost: 80}] };
+    globalThis.FileReader = class {
+      readAsText() { this.result = JSON.stringify(backup); globalThis.importDone = this.onload(); }
+    };
+    globalThis.alert = () => {};
+    persist = async () => true; fillCompanyForm = () => {}; render = () => {};
+    importBackup({target: {files: [{}]}});`);
+  await run('importDone');
+  assert.equal(run('state.clients[0].name'), 'Cliente restaurado');
+  assert.equal(run('state.products[0].cost'), 80);
 });
