@@ -11,10 +11,11 @@ util.isRegExp = util.isRegExp || util.types.isRegExp;
 const Datastore = require('nedb');
 const { MongoClient } = require('mongodb');
 const { Pool } = require('pg');
+const { resolvePostgresUrl } = require('./postgres-config');
 
 const DATA_DIR = process.env.CCN_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app-state.db');
-const POSTGRES_URL = process.env.URL_POSTGRES || process.env.POSTGRES_URL || process.env.DATABASE_URL;
+const POSTGRES_URL = resolvePostgresUrl();
 const POSTGRES_ENV = {
   host: process.env.PGHOST,
   database: process.env.PGDATABASE,
