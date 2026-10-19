@@ -78,7 +78,7 @@ test('PUT /api/state salva os dados no banco', async () => {
         createdAt: '2026-08-31T10:00:00.000Z',
         createdDate: '2026-08-31',
         updatedAt: '2026-08-31T10:00:00.000Z',
-        items: [{ description: 'Tela', qty: 1, price: 500 }]
+        items: [{ description: 'Tela', qty: 1, price: 500, cost: 120 }]
       }
     ],
     cash: [
@@ -93,6 +93,7 @@ test('PUT /api/state salva os dados no banco', async () => {
         installments: 1,
         description: 'Pagamento de OS',
         amount: 100,
+        cost: 40,
         date: '2026-08-31',
         createdAt: '2026-08-31T10:00:00.000Z'
       }
@@ -110,6 +111,9 @@ test('PUT /api/state salva os dados no banco', async () => {
   assert.equal(body.company.name, 'CCN SOLUÇÕES TECNOLÓGICAS');
   assert.equal(body.orders.length, 1);
   assert.equal(body.orders[0].imeiCheckResult, 'Sem restricao localizada');
+  const saved = await fetch('http://127.0.0.1:4100/api/state').then((result) => result.json());
+  assert.equal(saved.orders[0].items[0].cost, 120);
+  assert.equal(saved.cash[0].cost, 40);
 });
 
 test('GET /api/imei-check consulta o link configurado', async () => {

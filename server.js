@@ -14,7 +14,14 @@ const { Pool } = require('pg');
 
 const DATA_DIR = process.env.CCN_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app-state.db');
-const POSTGRES_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const POSTGRES_URL = process.env.URL_POSTGRES || process.env.POSTGRES_URL || process.env.DATABASE_URL;
+const POSTGRES_ENV = {
+  host: process.env.PGHOST,
+  database: process.env.PGDATABASE,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  port: process.env.PGPORT
+};
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || 'ccn';
 const STATE_ID = 'app_state';
@@ -418,11 +425,70 @@ async function createMongoStore() {
   };
 }
 
+function hasPostgresConfig() {
+  return Boolean(
+    POSTGRES_URL
+    || (POSTGRES_ENV.host && POSTGRES_ENV.database && POSTGRES_ENV.user && POSTGRES_ENV.password)
+  );
+}
+
+function postgresSslConfig() {
+  const legacySsl = String(process.env.POSTGRES_SSL || '').toLowerCase();
+  const sslMode = String(process.env.PGSSLMODE || '').toLowerCase();
+
+  if (legacySsl === 'false' || sslMode === 'disable') {
+    return false;
+  }
+
+  if (sslMode === 'verify-ca' || sslMode === 'verify-full') {
+    return { rejectUnauthorized: true };
+  }
+
+  if (sslMode === 'require' || sslMode === 'prefer' || sslMode === 'no-verify') {
+    return { rejectUnauthorized: false };
+  }
+
+  if (POSTGRES_URL) {
+    try {
+      const url = new URL(POSTGRES_URL);
+      const urlSslMode = String(url.searchParams.get('sslmode') || '').toLowerCase();
+
+      if (urlSslMode === 'disable') return false;
+      if (urlSslMode === 'verify-ca' || urlSslMode === 'verify-full') {
+        return { rejectUnauthorized: true };
+      }
+    } catch {
+      return { rejectUnauthorized: false };
+    }
+  }
+
+  return { rejectUnauthorized: false };
+}
+
+function postgresPoolConfig() {
+  const ssl = postgresSslConfig();
+
+  if (POSTGRES_URL) {
+    return {
+      connectionString: POSTGRES_URL,
+      ssl
+    };
+  }
+
+  const config = {
+    host: POSTGRES_ENV.host,
+    database: POSTGRES_ENV.database,
+    user: POSTGRES_ENV.user,
+    password: POSTGRES_ENV.password,
+    port: POSTGRES_ENV.port ? Number(POSTGRES_ENV.port) : 5432,
+    ssl
+  };
+
+  return config;
+}
+
 async function createPostgresStore() {
-  const pool = new Pool({
-    connectionString: POSTGRES_URL,
-    ssl: process.env.POSTGRES_SSL === 'false' ? false : { rejectUnauthorized: false }
-  });
+  const pool = new Pool(postgresPoolConfig());
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_state (
@@ -468,8 +534,11 @@ async function createPostgresStore() {
 }
 
 function createStore() {
-  if (POSTGRES_URL) {
-    return createPostgresStore();
+  if (hasPostgresConfig()) {
+    return createPostgresStore().catch((error) => {
+      console.error('Erro ao conectar ao PostgreSQL configurado. O sistema nao usara fallback para o banco local.', error);
+      throw error;
+    });
   }
 
   if (MONGODB_URI) {

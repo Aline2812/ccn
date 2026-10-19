@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sistema de OS e Caixa - Assistencia Tecnica</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=dropdown-below-2">
   </head>
   <body>
     <div class="app-shell">
@@ -119,6 +119,15 @@
         </section>
 
         <section class="view" id="cashView">
+          <div class="stats-grid" aria-label="Resumo do caixa">
+            <article class="metric"><span>Valores recebidos</span><strong id="cashIncome">R$ 0,00</strong></article>
+            <article class="metric"><span>Custos das peças</span><strong id="cashCosts">R$ 0,00</strong></article>
+            <article class="metric"><span>Saídas / despesas</span><strong id="cashExpenses">R$ 0,00</strong></article>
+            <article class="metric"><span>Lucro após saídas</span><strong id="cashProfitTotal">R$ 0,00</strong></article>
+          </div>
+          <div class="history-tabs" role="tablist" aria-label="Caixa">
+            <button class="history-tab active" id="cashMovementsTab" type="button" role="tab" aria-selected="true">Movimentos</button>
+          </div>
           <div class="split-layout cash-layout">
             <section class="panel">
               <div class="panel-heading">
@@ -138,6 +147,11 @@
                     <option>Venda</option>
                     <option>Manutencao/OS</option>
                     <option>Despesa</option>
+                    <option>Aluguel</option>
+                    <option>Luz</option>
+                    <option>Água</option>
+                    <option>Internet</option>
+                    <option>Gasto Particular</option>
                   </select>
                 </label>
                 <label>
@@ -193,9 +207,18 @@
                   <input id="cashDescription" required placeholder="Ex: venda de carregador, pagamento OS-2026-0001, compra de peca">
                 </label>
                 <label>
-                  Valor
+                  <span id="cashAmountLabel">Valor cobrado / recebido</span>
                   <input id="cashAmount" type="number" min="0.01" step="0.01" required>
                 </label>
+                <label id="cashCostLabel">
+                  Custo da peça (total)
+                  <input id="cashCost" type="number" min="0" step="0.01" value="0" required>
+                </label>
+                <label id="cashProfitLabel">
+                  Lucro (valor recebido − custo)
+                  <input id="cashProfit" readonly aria-live="polite">
+                </label>
+                <p class="wide">O custo informado na entrada já é descontado do saldo. Não lance a mesma peça novamente como saída.</p>
                 <label>
                   Data
                   <input id="cashDate" type="date" required>
@@ -217,9 +240,12 @@
                     <tr>
                       <th>Data</th>
                       <th>Categoria</th>
+                      <th>Cliente</th>
                       <th>Descricao</th>
                       <th>Forma</th>
                       <th>Valor</th>
+                      <th>Custo</th>
+                      <th>Lucro</th>
                       <th>Acoes</th>
                     </tr>
                   </thead>
@@ -303,8 +329,12 @@
                 <input id="productBrandInput">
               </label>
               <label>
-                Preco
+                Valor cobrado / venda
                 <input id="productPriceInput" type="number" min="0" step="0.01">
+              </label>
+              <label>
+                Custo unitário da peça / serviço
+                <input id="productCostInput" type="number" min="0" step="0.01" value="0">
               </label>
               <label>
                 Estoque
@@ -327,6 +357,7 @@
                     <th>Categoria</th>
                     <th>Marca</th>
                     <th>Preco</th>
+                    <th>Custo</th>
                     <th>Estoque</th>
                   </tr>
                 </thead>
@@ -425,6 +456,8 @@
                   <th>Forma</th>
                   <th>Cliente/OS</th>
                   <th>Valor</th>
+                  <th>Custo</th>
+                  <th>Lucro</th>
                 </tr>
               </thead>
               <tbody id="cashHistoryTable"></tbody>
@@ -561,6 +594,7 @@
             <button class="ghost-button" id="addItemButton" type="button">Adicionar item</button>
           </div>
           <div id="itemsList" class="items-list"></div>
+          <p>Custo das peças: <strong id="orderCost">R$ 0,00</strong> · Lucro previsto: <strong id="orderProfit">R$ 0,00</strong></p>
         </section>
 
         <div class="dialog-footer">
@@ -582,9 +616,10 @@
 
     <template id="itemTemplate">
       <div class="item-row">
-        <input class="item-description" list="productSuggestions" placeholder="Descricao do item">
-        <input class="item-qty" type="number" min="1" step="1" value="1" aria-label="Quantidade">
-        <input class="item-price" type="number" min="0" step="0.01" value="0" aria-label="Valor">
+        <label>Peça / serviço<input class="item-description" list="productSuggestions" placeholder="Ex: troca da tela Samsung A80"></label>
+        <label>Quantidade<input class="item-qty" type="number" min="1" step="1" value="1" aria-label="Quantidade" required></label>
+        <label>Custo unitário<input class="item-cost" type="number" min="0" step="0.01" value="0" aria-label="Custo unitário da peça" required></label>
+        <label>Valor cobrado unitário<input class="item-price" type="number" min="0" step="0.01" value="0" aria-label="Valor cobrado unitário" required></label>
         <button class="icon-button remove-item" type="button" title="Remover item">×</button>
       </div>
     </template>
@@ -592,6 +627,7 @@
     <section id="receiptPrintArea" class="receipt-print" aria-hidden="true"></section>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=personal-expenses-2"></script>
+    <script src="dropdowns.js?v=dropdown-below-2"></script>
   </body>
 </html>

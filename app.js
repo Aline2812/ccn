@@ -17,6 +17,7 @@ let state = {
 };
 let editingOrderId = null;
 let editingCashId = null;
+const FIXED_EXPENSES = ["Aluguel", "Luz", "Água", "Internet"];
 
 const els = {
   pageTitle: document.querySelector("#pageTitle"),
@@ -56,6 +57,15 @@ const els = {
   cashInstallmentsLabel: document.querySelector("#cashInstallmentsLabel"),
   cashDescription: document.querySelector("#cashDescription"),
   cashAmount: document.querySelector("#cashAmount"),
+  cashAmountLabel: document.querySelector("#cashAmountLabel"),
+  cashCost: document.querySelector("#cashCost"),
+  cashCostLabel: document.querySelector("#cashCostLabel"),
+  cashProfit: document.querySelector("#cashProfit"),
+  cashProfitLabel: document.querySelector("#cashProfitLabel"),
+  cashIncome: document.querySelector("#cashIncome"),
+  cashCosts: document.querySelector("#cashCosts"),
+  cashExpenses: document.querySelector("#cashExpenses"),
+  cashProfitTotal: document.querySelector("#cashProfitTotal"),
   cashDate: document.querySelector("#cashDate"),
   cashTable: document.querySelector("#cashTable"),
   cashTotal: document.querySelector("#cashTotal"),
@@ -80,6 +90,8 @@ const els = {
   itemsList: document.querySelector("#itemsList"),
   itemTemplate: document.querySelector("#itemTemplate"),
   orderTotal: document.querySelector("#orderTotal"),
+  orderCost: document.querySelector("#orderCost"),
+  orderProfit: document.querySelector("#orderProfit"),
   backupButton: document.querySelector("#backupButton"),
   restoreInput: document.querySelector("#restoreInput"),
   historyButton: document.querySelector("#historyButton"),
@@ -99,6 +111,7 @@ const els = {
   productCategoryInput: document.querySelector("#productCategoryInput"),
   productBrandInput: document.querySelector("#productBrandInput"),
   productPriceInput: document.querySelector("#productPriceInput"),
+  productCostInput: document.querySelector("#productCostInput"),
   productCodeInput: document.querySelector("#productCodeInput"),
   productStockInput: document.querySelector("#productStockInput"),
   historyTabs: document.querySelectorAll(".history-tab"),
@@ -135,6 +148,9 @@ boot();
 
 async function boot() {
   state = await loadState();
+  state.cash.forEach((item) => {
+    if (item.category === "GASTOS PARTICULAR") item.category = "Gasto Particular";
+  });
   els.cashDate.valueAsDate = new Date();
   bindEvents();
   syncCreditFields();
@@ -169,6 +185,8 @@ function bindEvents() {
   els.orderSearch.addEventListener("input", renderOrders);
   els.statusFilter.addEventListener("change", renderOrders);
   els.cashType.addEventListener("change", syncCashCategory);
+  els.cashAmount.addEventListener("input", updateCashProfit);
+  els.cashCost.addEventListener("input", updateCashProfit);
   els.cashCategory.addEventListener("change", syncCashContext);
   if (els.cashOrderSelect) {
     els.cashOrderSelect.addEventListener("change", fillCashFromOrder);
@@ -229,7 +247,14 @@ function syncCashCategory() {
 
 function syncCashContext() {
   const isMaintenance = els.cashCategory.value === "Manutencao/OS";
-  const isExpense = els.cashCategory.value === "Despesa";
+  const isExpense = ["Despesa", "Gasto Particular", ...FIXED_EXPENSES].includes(els.cashCategory.value);
+  if (isExpense) els.cashType.value = "saida";
+  const isIncome = els.cashType.value === "entrada";
+  els.cashCostLabel.classList.toggle("hidden-field", !isIncome);
+  els.cashProfitLabel.classList.toggle("hidden-field", !isIncome);
+  els.cashCost.disabled = !isIncome;
+  els.cashAmountLabel.textContent = isIncome ? "Valor cobrado / recebido" : "Valor da saída";
+  updateCashProfit();
 
   els.cashOrderLabel.classList.toggle("visible", isMaintenance);
   els.cashClientLabel.classList.toggle("hidden-field", isExpense);
@@ -244,6 +269,10 @@ function syncCashContext() {
   }
 }
 
+function updateCashProfit() {
+  els.cashProfit.value = money.format(Number(els.cashAmount.value || 0) - Number(els.cashCost.value || 0));
+}
+
 function fillCashFromOrder() {
   const order = state.orders.find((item) => item.id === els.cashOrderSelect.value);
   if (!order) return;
@@ -253,6 +282,11 @@ function fillCashFromOrder() {
   els.cashClientCpf.value = order.clientCpf || els.cashClientCpf.value || "";
   els.cashDescription.value = `Pagamento ${order.code} - ${order.clientName} - ${order.deviceType} ${order.deviceModel}`;
   els.cashAmount.value = balance.toFixed(2);
+  const recordedCost = state.cash
+    .filter((entry) => entry.orderId === order.id && entry.id !== editingCashId)
+    .reduce((sum, entry) => sum + cashCost(entry), 0);
+  els.cashCost.value = Math.max(orderCost(order) - recordedCost, 0).toFixed(2);
+  updateCashProfit();
 }
 
 function handleCashClientCpfLookup() {
@@ -491,6 +525,11 @@ function renderOrders() {
 
 function renderCash() {
   const sorted = [...state.cash].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const totals = cashTotals();
+  els.cashIncome.textContent = money.format(totals.income);
+  els.cashCosts.textContent = money.format(totals.costs);
+  els.cashExpenses.textContent = money.format(totals.expenses);
+  els.cashProfitTotal.textContent = money.format(totals.profit);
   renderCashOrderOptions();
   els.cashTotal.textContent = money.format(cashBalance());
   els.cashTable.innerHTML = sorted.length
@@ -502,10 +541,12 @@ function renderCash() {
         <td>${escapeHtml(item.description)}</td>
         <td>${escapeHtml(paymentLabel(item))}</td>
         <td>${item.type === "entrada" ? "+" : "-"} ${money.format(Number(item.amount))}</td>
+        <td>${item.type === "entrada" ? money.format(cashCost(item)) : "—"}</td>
+        <td>${item.type === "entrada" ? money.format(Number(item.amount) - cashCost(item)) : "—"}</td>
         <td><button class="ghost-button" type="button" data-edit-cash="${item.id}">Editar</button></td>
       </tr>
     `).join("")
-    : `<tr><td colspan="7">Nenhum movimento cadastrado.</td></tr>`;
+    : `<tr><td colspan="9">Nenhum movimento cadastrado.</td></tr>`;
 }
 
 function handleCashTableClick(event) {
@@ -525,6 +566,7 @@ function openCashEditor(item) {
   els.cashMethod.value = item.method || "Dinheiro";
   els.cashDescription.value = item.description || "";
   els.cashAmount.value = Number(item.amount || 0);
+  els.cashCost.value = cashCost(item);
   els.cashDate.value = item.date || toDateInput(new Date());
   els.cashClientName.value = item.clientName || "";
   els.cashClientCpf.value = item.clientCpf || "";
@@ -588,9 +630,11 @@ function renderHistoryTables() {
         <td>${escapeHtml(paymentLabel(item))}</td>
         <td>${escapeHtml(item.clientName || item.orderId || "-")}</td>
         <td>${item.type === "entrada" ? "+" : "-"} ${money.format(Number(item.amount))}</td>
+        <td>${item.type === "entrada" ? money.format(cashCost(item)) : "—"}</td>
+        <td>${item.type === "entrada" ? money.format(Number(item.amount) - cashCost(item)) : "—"}</td>
       </tr>
     `).join("")
-    : `<tr><td colspan="7">Nenhum movimento de caixa no historico.</td></tr>`;
+    : `<tr><td colspan="9">Nenhum movimento de caixa no historico.</td></tr>`;
 }
 
 function handleCashHistoryTableClick(event) {
@@ -647,10 +691,11 @@ function renderProductCatalog() {
         <td>${escapeHtml(product.category || "-")}</td>
         <td>${escapeHtml(product.brand || "-")}</td>
         <td>${money.format(Number(product.price || 0))}</td>
+        <td>${money.format(Number(product.cost || 0))}</td>
         <td>${escapeHtml(product.stock || "0")}</td>
       </tr>
     `).join("")
-    : `<tr><td colspan="6">Nenhum produto cadastrado.</td></tr>`;
+    : `<tr><td colspan="7">Nenhum produto cadastrado.</td></tr>`;
 }
 
 function syncAutocompleteLists() {
@@ -702,6 +747,7 @@ function saveProduct(event) {
     category: els.productCategoryInput.value.trim(),
     brand: els.productBrandInput.value.trim(),
     price: Number(els.productPriceInput.value || 0),
+    cost: Number(els.productCostInput.value || 0),
     stock: Number(els.productStockInput.value || 0)
   };
 
@@ -811,18 +857,23 @@ function addItemRow(item = { description: "", qty: 1, price: 0 }) {
   const descriptionInput = fragment.querySelector(".item-description");
   const quantityInput = fragment.querySelector(".item-qty");
   const priceInput = fragment.querySelector(".item-price");
+  const costInput = fragment.querySelector(".item-cost");
 
   descriptionInput.value = item.description || "";
   quantityInput.value = item.qty || 1;
   priceInput.value = item.price || 0;
+  costInput.value = item.cost || 0;
 
-  descriptionInput.addEventListener("input", () => {
+  const fillFromProduct = () => {
     const product = findProductByNameOrCode(descriptionInput.value);
     if (!product) return;
     descriptionInput.value = product.name;
-    priceInput.value = Number(product.price || 0).toFixed(2);
+    // Older product records stored their only registered value in price.
+    costInput.value = Number(product.cost ?? product.price ?? 0).toFixed(2);
     calculateDialogTotal();
-  });
+  };
+  descriptionInput.addEventListener("input", fillFromProduct);
+  descriptionInput.addEventListener("change", fillFromProduct);
 
   els.itemsList.append(fragment);
   calculateDialogTotal();
@@ -835,8 +886,7 @@ function findProductByNameOrCode(value) {
   return state.products.find((product) => {
     const name = normalize(product.name || "");
     const code = normalize(product.code || "");
-    const category = normalize(product.category || "");
-    return name.includes(query) || code.includes(query) || category.includes(query);
+    return name === query || (code && code === query);
   }) || null;
 }
 
@@ -849,8 +899,11 @@ function handleItemRemove(event) {
 }
 
 function calculateDialogTotal() {
-  const total = readItemsFromDialog().reduce((sum, item) => sum + item.qty * item.price, 0);
+  const order = { items: readItemsFromDialog() };
+  const total = orderTotal(order);
   els.orderTotal.textContent = money.format(total);
+  els.orderCost.textContent = money.format(orderCost(order));
+  els.orderProfit.textContent = money.format(total - orderCost(order));
 }
 
 function handleImeiInput() {
@@ -1119,18 +1172,22 @@ function readItemsFromDialog() {
       const description = (descriptionInput?.value || "").trim();
       const qty = Number(qtyInput?.value || 1);
       const price = Number(priceInput?.value || 0);
+      const cost = Number(row.querySelector(".item-cost")?.value || 0);
 
       return {
         description,
         qty,
-        price
+        price,
+        cost
       };
     })
-    .filter((item) => item.description || item.price > 0);
+    .filter((item) => item.description || item.price > 0 || item.cost > 0);
 }
 
 function saveCashMovement(event) {
   event.preventDefault();
+  syncCashContext();
+  if (!els.cashForm.reportValidity()) return;
   const payload = {
     id: editingCashId || crypto.randomUUID(),
     type: els.cashType.value,
@@ -1145,6 +1202,7 @@ function saveCashMovement(event) {
       : 1,
     description: els.cashDescription.value.trim(),
     amount: Number(els.cashAmount.value),
+    cost: els.cashType.value === "entrada" ? Number(els.cashCost.value || 0) : 0,
     date: els.cashDate.value,
     createdAt: editingCashId ? (state.cash.find((item) => item.id === editingCashId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   };
@@ -1240,7 +1298,9 @@ function exportHistoryExcel(type) {
       Descricao: item.description,
       Forma: paymentLabel(item),
       Cliente_OS: item.clientName || item.orderId || "-",
-      Valor: Number(item.amount)
+      Valor: Number(item.amount),
+      Custo: cashCost(item),
+      Lucro: item.type === "entrada" ? Number(item.amount) - cashCost(item) : null
     }));
 
   const sheet = XLSX.utils.json_to_sheet(rows);
@@ -1294,11 +1354,29 @@ function orderBalance(order) {
   return Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0);
 }
 
+function orderCost(order) {
+  return order.items.reduce((sum, item) => sum + Number(item.qty) * Number(item.cost || 0), 0);
+}
+
+function cashCost(item) {
+  return item.type === "entrada" ? Number(item.cost || 0) : 0;
+}
+
+function cashTotals() {
+  const totals = state.cash.reduce((sum, item) => {
+    if (item.type === "entrada") {
+      sum.income += Number(item.amount);
+      sum.costs += cashCost(item);
+    } else {
+      sum.expenses += Number(item.amount);
+    }
+    return sum;
+  }, { income: 0, costs: 0, expenses: 0 });
+  return { ...totals, profit: totals.income - totals.costs - totals.expenses };
+}
+
 function cashBalance() {
-  return state.cash.reduce((sum, item) => {
-    const amount = Number(item.amount);
-    return item.type === "entrada" ? sum + amount : sum - amount;
-  }, 0);
+  return cashTotals().profit;
 }
 
 function paymentLabel(item) {

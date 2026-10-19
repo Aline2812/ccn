@@ -6,21 +6,23 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: ccn-postgres
-          property: connectionString
-      - key: POSTGRES_SSL
-        value: "false"
       - key: NODE_VERSION
         value: 20.19.0
+      - key: PGHOST
+        sync: false
+      - key: PGDATABASE
+        sync: false
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: PGPORT
+        value: "5432"
+      - key: PGSSLMODE
+        value: require
       - key: WHATSAPP_ACCESS_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
       - key: WHATSAPP_API_VERSION
         value: v21.0
-
-databases:
-  - name: ccn-postgres
-    plan: free
