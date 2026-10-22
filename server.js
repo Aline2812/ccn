@@ -568,7 +568,7 @@ function createApp() {
     next();
   });
   // Only public interface files are served. Never expose database or source files.
-  const assets = ['index.html', 'styles.css', 'app.js', 'login.js', 'dropdowns.js', 'logo.png.jpeg'];
+  const assets = ['index.html', 'styles.css', 'app.js', 'login.js', 'dropdowns.js', 'theme.js', 'logo.png.jpeg'];
   app.get(['/', ...assets.map((name) => `/${name}`)], (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.sendFile(path.join(__dirname, req.path === '/' ? 'index.html' : req.path.slice(1)));

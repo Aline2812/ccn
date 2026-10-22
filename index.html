@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sistema de OS e Caixa - Assistencia Tecnica</title>
-    <link rel="stylesheet" href="styles.css?v=search-1">
+    <script src="theme.js?v=theme-1"></script>
+    <link rel="stylesheet" href="styles.css?v=theme-1">
   </head>
   <body>
     <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
@@ -13,6 +14,7 @@
         <p class="eyebrow">CCN Soluções Tecnológicas</p>
         <h1 id="loginTitle">Acesse o sistema</h1>
         <p>Informe seu usuário e sua senha a cada abertura.</p>
+        <button class="ghost-button" type="button" data-theme-toggle>Tema escuro</button>
         <form id="loginForm" autocomplete="off">
           <label>Usuário<input name="username" id="loginUsername" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100" required></label>
           <label>Senha<input name="password" id="loginPassword" type="password" autocomplete="off" maxlength="256" required></label>
@@ -53,6 +55,7 @@
             <h1 id="pageTitle">ACOMPANHAMENTO DE CONTROLE</h1>
           </div>
           <div class="top-actions">
+            <button class="ghost-button" type="button" data-theme-toggle>Tema escuro</button>
             <button class="ghost-button" id="logoutButton" type="button">Sair</button>
             <button class="icon-button" id="backupButton" type="button" title="Exportar backup">⇩</button>
             <label class="icon-button file-button" title="Importar backup">

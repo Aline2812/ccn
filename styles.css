@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f4f6f8;
   --panel: #ffffff;
   --ink: #17202a;
@@ -12,6 +13,33 @@
   --warn: #a45f00;
   --info: #245db8;
   --shadow: 0 18px 40px rgba(23, 32, 42, 0.08);
+  --surface: #f7f9fb;
+  --chip-bg: #edf2f7;
+  --ok-bg: #e6f5ee;
+  --warn-bg: #fff3dd;
+  --info-bg: #e9f0ff;
+  --danger-bg: #ffe9e7;
+  --danger-fill: #b42318;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101820;
+  --panel: #1b2733;
+  --ink: #edf2f7;
+  --muted: #b7c2cf;
+  --line: #405164;
+  --surface: #243342;
+  --chip-bg: #304154;
+  --ok: #79dbab;
+  --ok-bg: #173c2c;
+  --warn: #ffc16b;
+  --warn-bg: #42321a;
+  --info: #9ac1ff;
+  --info-bg: #203959;
+  --danger: #ffaaa2;
+  --danger-bg: #492725;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -76,9 +104,7 @@ body {
   margin: 0;
   min-height: 100vh;
   color: var(--ink);
-  background:
-    linear-gradient(135deg, rgba(16, 16, 16, 0.88), rgba(43, 10, 10, 0.92)),
-    var(--bg);
+  background: var(--bg);
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -212,6 +238,28 @@ button {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 
+:root:not([data-theme="dark"]) .workspace {
+  background: var(--bg);
+}
+
+:root:not([data-theme="dark"]) .workspace .topbar h1 {
+  color: var(--ink);
+  text-shadow: none;
+}
+
+:root:not([data-theme="dark"]) .workspace .topbar .eyebrow {
+  color: var(--muted);
+  text-shadow: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 3px;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--muted);
@@ -278,14 +326,14 @@ h3 {
 .ghost-button {
   padding: 0 14px;
   color: var(--ink);
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .danger-button {
   padding: 0 14px;
   color: #ffffff;
-  border-color: var(--danger);
-  background: var(--danger);
+  border-color: var(--danger-fill);
+  background: var(--danger-fill);
 }
 
 .icon-button {
@@ -294,7 +342,7 @@ h3 {
   height: 40px;
   place-items: center;
   color: var(--ink);
-  background: #ffffff;
+  background: var(--panel);
   font-size: 20px;
   line-height: 1;
 }
@@ -394,7 +442,7 @@ th {
   gap: 4px;
   padding: 12px;
   border-radius: 8px;
-  background: #f7f9fb;
+  background: var(--surface);
 }
 
 .timeline-item strong {
@@ -435,7 +483,13 @@ textarea {
   border-radius: 8px;
   padding: 11px 12px;
   color: var(--ink);
-  background: #ffffff;
+  background: var(--panel);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 
 textarea {
@@ -490,29 +544,29 @@ textarea {
   min-height: 28px;
   padding: 0 10px;
   border-radius: 8px;
-  background: #edf2f7;
+  background: var(--chip-bg);
   font-size: 12px;
   font-weight: 800;
 }
 
 .chip.ok {
   color: var(--ok);
-  background: #e6f5ee;
+  background: var(--ok-bg);
 }
 
 .chip.warn {
   color: var(--warn);
-  background: #fff3dd;
+  background: var(--warn-bg);
 }
 
 .chip.info {
   color: var(--info);
-  background: #e9f0ff;
+  background: var(--info-bg);
 }
 
 .chip.danger {
   color: var(--danger);
-  background: #ffe9e7;
+  background: var(--danger-bg);
 }
 
 .cash-layout {
@@ -591,6 +645,8 @@ input[data-suggestion-list] {
 }
 
 dialog {
+  color: var(--ink);
+  background: var(--panel);
   width: min(980px, calc(100vw - 28px));
   max-height: calc(100vh - 28px);
   border: 0;
@@ -658,7 +714,7 @@ dialog::backdrop {
   text-align: center;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.65);
+  background: var(--panel);
 }
 
 .receipt-print {
@@ -676,7 +732,7 @@ dialog::backdrop {
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f7f9fb;
+  background: var(--surface);
 }
 
 .history-tab {
