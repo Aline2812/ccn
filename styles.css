@@ -410,6 +410,23 @@ th {
   margin-bottom: 16px;
 }
 
+.search-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.search-toolbar input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.search-toolbar select {
+  flex: 1 1 180px;
+  width: auto;
+}
+
 input,
 select,
 textarea {

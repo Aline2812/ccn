@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sistema de OS e Caixa - Assistencia Tecnica</title>
-    <link rel="stylesheet" href="styles.css?v=login-1">
+    <link rel="stylesheet" href="styles.css?v=search-1">
   </head>
   <body>
     <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
@@ -65,6 +65,11 @@
         </header>
 
         <section class="view active" id="dashboardView">
+          <form id="dashboardSearchForm" class="search-toolbar" role="search" aria-label="Pesquisar acompanhamento">
+            <input id="dashboardSearch" type="search" aria-label="Pesquisar acompanhamento por CPF, OS ou nome do cliente" placeholder="CPF, número da OS ou nome do cliente">
+            <button class="primary-button" type="submit">Pesquisar</button>
+            <button class="ghost-button" type="reset">Limpar</button>
+          </form>
           <div class="stats-grid">
             <article class="metric">
               <span>OS abertas</span>
@@ -117,8 +122,10 @@
         </section>
 
         <section class="view" id="ordersView">
-          <div class="toolbar">
-            <input id="orderSearch" type="search" placeholder="Buscar por cliente, aparelho, telefone ou OS">
+          <form id="orderSearchForm" class="search-toolbar" role="search" aria-label="Pesquisar ordens de serviço">
+            <input id="orderSearch" type="search" aria-label="Pesquisar ordens por CPF, OS ou nome do cliente" placeholder="CPF, número da OS ou nome do cliente">
+            <button class="primary-button" type="submit">Pesquisar</button>
+            <button class="ghost-button" type="reset">Limpar</button>
             <select id="statusFilter">
               <option value="">Todos os status</option>
               <option>Entrada</option>
@@ -131,11 +138,16 @@
               <option>Finalizado e retirado</option>
               <option>Cancelado</option>
             </select>
-          </div>
+          </form>
           <div class="orders-grid" id="ordersGrid"></div>
         </section>
 
         <section class="view" id="cashView">
+          <form id="cashSearchForm" class="search-toolbar" role="search" aria-label="Pesquisar movimentos do caixa">
+            <input id="cashSearch" type="search" aria-label="Pesquisar caixa por CPF, OS ou nome do cliente" placeholder="CPF, número da OS ou nome do cliente">
+            <button class="primary-button" type="submit">Pesquisar</button>
+            <button class="ghost-button" type="reset">Limpar</button>
+          </form>
           <div class="stats-grid" aria-label="Resumo do caixa">
             <article class="metric"><span>Valores recebidos</span><strong id="cashIncome">R$ 0,00</strong></article>
             <article class="metric"><span>Custos das peças</span><strong id="cashCosts">R$ 0,00</strong></article>
@@ -650,7 +662,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="login.js?v=login-1"></script>
-    <script src="app.js?v=cash-cpf-os-2"></script>
+    <script src="app.js?v=search-1"></script>
     <script src="dropdowns.js?v=dropdown-below-2"></script>
   </body>
 </html>

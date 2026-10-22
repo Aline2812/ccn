@@ -40,6 +40,8 @@ const els = {
   cashTimeline: document.querySelector("#cashTimeline"),
   ordersGrid: document.querySelector("#ordersGrid"),
   orderSearch: document.querySelector("#orderSearch"),
+  dashboardSearch: document.querySelector("#dashboardSearch"),
+  cashSearch: document.querySelector("#cashSearch"),
   statusFilter: document.querySelector("#statusFilter"),
   cashForm: document.querySelector("#cashForm"),
   cashType: document.querySelector("#cashType"),
@@ -189,7 +191,9 @@ function bindEvents() {
   els.dueDate.addEventListener("blur", normalizeBrazilianDateInput);
   els.deviceSerial.addEventListener("input", handleImeiInput);
   els.openImeiCheckButton.addEventListener("click", openOfficialImeiCheck);
-  els.orderSearch.addEventListener("input", renderOrders);
+  bindSearchForm("dashboardSearchForm", els.dashboardSearch, renderDashboard);
+  bindSearchForm("orderSearchForm", els.orderSearch, renderOrders);
+  bindSearchForm("cashSearchForm", els.cashSearch, renderCash);
   els.statusFilter.addEventListener("change", renderOrders);
   els.cashType.addEventListener("change", syncCashCategory);
   els.cashAmount.addEventListener("input", updateCashProfit);
@@ -245,6 +249,44 @@ function bindEvents() {
   if (els.downloadCashHistory) {
     els.downloadCashHistory.addEventListener("click", () => exportHistoryExcel("cash"));
   }
+}
+
+function bindSearchForm(formId, input, renderResults) {
+  const form = document.querySelector(`#${formId}`);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    renderResults();
+  });
+  form.addEventListener("reset", (event) => {
+    event.preventDefault();
+    input.value = "";
+    if (formId === "orderSearchForm") els.statusFilter.value = "";
+    renderResults();
+  });
+  input.addEventListener("input", renderResults);
+}
+
+function matchesRecordSearch(query, fields, cpf, code) {
+  const text = normalize(String(query || "").trim());
+  if (!text) return true;
+  if (normalize(fields.filter(Boolean).join(" ")).includes(text)) return true;
+  const cpfQuery = /^[\d.\-\s]+$/.test(text) ? normalizeCpf(text) : "";
+  if (cpfQuery && normalizeCpf(cpf).includes(cpfQuery)) return true;
+  const compactQuery = text.replace(/[^a-z0-9]/g, "");
+  return Boolean(compactQuery && normalize(String(code || "")).replace(/[^a-z0-9]/g, "").includes(compactQuery));
+}
+
+function matchesOrderSearch(order, query) {
+  return matchesRecordSearch(query, [order.code, order.clientName, order.clientPhone, order.clientCpf,
+    order.clientMessagePhone, order.clientAddress, order.deviceType, order.deviceModel,
+    order.deviceSerial, order.imeiCheckResult, order.reportedIssue], order.clientCpf, order.code);
+}
+
+function matchesCashSearch(item, query) {
+  const order = state.orders.find((entry) => entry.id === item.orderId);
+  return matchesRecordSearch(query, [item.clientName, item.clientCpf, item.description,
+    order?.clientName, order?.clientCpf, order?.code], item.clientCpf, order?.code)
+    || Boolean(order && matchesRecordSearch(query, [], order.clientCpf, order.code));
 }
 
 function syncCashCategory() {
@@ -433,6 +475,7 @@ function render() {
 }
 
 function renderDashboard() {
+  const query = els.dashboardSearch.value.trim();
   const openOrders = state.orders.filter((order) => !["Finalizado", "Finalizado e retirado", "Cancelado"].includes(order.status));
   const waitingOrders = state.orders.filter((order) => order.status === "Aguardando retirada");
   const today = toDateInput(new Date());
@@ -448,8 +491,9 @@ function renderDashboard() {
   els.openOrdersCount.textContent = `${openOrders.length} abertas`;
 
   const recent = [...state.orders]
+    .filter((order) => matchesOrderSearch(order, query))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 6);
+    .slice(0, query ? undefined : 6);
 
   els.recentOrdersTable.innerHTML = recent.length
     ? recent.map((order) => `
@@ -461,9 +505,11 @@ function renderDashboard() {
         <td>${money.format(orderTotal(order))}</td>
       </tr>
     `).join("")
-    : `<tr><td colspan="5">Nenhuma ordem cadastrada.</td></tr>`;
+    : `<tr><td colspan="5">${query ? "Nenhuma ordem encontrada para esta pesquisa." : "Nenhuma ordem cadastrada."}</td></tr>`;
 
-  const recentCash = [...state.cash].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  const recentCash = [...state.cash]
+    .filter((item) => matchesCashSearch(item, query))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, query ? undefined : 5);
   els.cashTimeline.innerHTML = recentCash.length
     ? recentCash.map((item) => `
       <div class="timeline-item">
@@ -474,7 +520,7 @@ function renderDashboard() {
         <small>${formatDate(item.date)} · ${escapeHtml(item.category || "Movimento")} · ${escapeHtml(paymentLabel(item))}</small>
       </div>
     `).join("")
-    : `<div class="empty-state">Nenhum movimento de caixa.</div>`;
+    : `<div class="empty-state">${query ? "Nenhum movimento encontrado para esta pesquisa." : "Nenhum movimento de caixa."}</div>`;
 }
 
 function renderOrders() {
@@ -483,22 +529,7 @@ function renderOrders() {
 
   const filtered = state.orders
     .filter((order) => !status || order.status === status)
-    .filter((order) => {
-      const haystack = normalize([
-        order.code,
-        order.clientName,
-        order.clientPhone,
-        order.clientCpf,
-        order.clientMessagePhone,
-        order.clientAddress,
-        order.deviceType,
-        order.deviceModel,
-        order.deviceSerial,
-        order.imeiCheckResult,
-        order.reportedIssue
-      ].join(" "));
-      return haystack.includes(query);
-    })
+    .filter((order) => matchesOrderSearch(order, query))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   els.ordersGrid.innerHTML = filtered.length
@@ -532,7 +563,9 @@ function renderOrders() {
 }
 
 function renderCash() {
-  const sorted = [...state.cash].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const query = els.cashSearch.value.trim();
+  const sorted = [...state.cash].filter((item) => matchesCashSearch(item, query))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const totals = cashTotals();
   els.cashIncome.textContent = money.format(totals.income);
   els.cashCosts.textContent = money.format(totals.costs);
@@ -554,7 +587,7 @@ function renderCash() {
         <td><button class="ghost-button" type="button" data-edit-cash="${item.id}">Editar</button></td>
       </tr>
     `).join("")
-    : `<tr><td colspan="9">Nenhum movimento cadastrado.</td></tr>`;
+    : `<tr><td colspan="9">${query ? "Nenhum movimento encontrado para esta pesquisa." : "Nenhum movimento cadastrado."}</td></tr>`;
 }
 
 function handleCashTableClick(event) {

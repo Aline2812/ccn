@@ -310,3 +310,66 @@ test('falha ao salvar pagamento restaura também status e saldo da OS', async ()
   assert.equal(run('state.orders[0].status'), 'Aguardando retirada');
   assert.equal(run('orderBalance(state.orders[0])'), 330);
 });
+
+test('pesquisa encontra CPF com ou sem máscara, OS sem separadores e nome sem acentos', () => {
+  const { run } = loadApp();
+  run(`state.orders = [{id: 'os1', code: 'OS-2026-0001', clientName: 'José da Silva', clientCpf: '123.456.789-01'}];
+    state.cash = [{orderId: 'os1', description: 'Pagamento'}];`);
+  for (const query of ['12345678901', '123.456.789-01', 'OS-2026-0001', 'os20260001', 'JOSE DA SILVA']) {
+    assert.equal(run(`matchesOrderSearch(state.orders[0], ${JSON.stringify(query)})`), true);
+    assert.equal(run(`matchesCashSearch(state.cash[0], ${JSON.stringify(query)})`), true);
+  }
+  run(`state.orders[0].clientCpf = '12345678901'`);
+  assert.equal(run(`matchesCashSearch(state.cash[0], '123.456.789-01')`), true);
+  assert.equal(run(`matchesOrderSearch(state.orders[0], 'outro cliente')`), false);
+  assert.equal(run(`matchesCashSearch(state.cash[0], 'outro cliente')`), false);
+  assert.equal(run(`matchesCashSearch({clientName: 'Maria', clientCpf: '98765432100'}, '987.654.321-00')`), true);
+});
+
+test('pesquisa filtra as três telas e encontra registros anteriores aos recentes', () => {
+  const { run, element } = loadApp();
+  run(`state.orders = Array.from({length: 8}, (_, i) => ({id: 'os' + i, code: 'OS-2026-000' + i,
+    clientName: i === 0 ? 'José Silva' : 'Maria', clientCpf: i === 0 ? '123.456.789-01' : '98765432100',
+    status: 'Entrada', updatedAt: '2026-10-' + (10 + i), items: []}));
+    state.cash = state.orders.map((order, i) => ({id: 'cash' + i, orderId: order.id,
+      description: 'Pagamento ' + i, createdAt: order.updatedAt, date: '2026-10-22', type: 'entrada', amount: 10}));`);
+  element('#dashboardSearch').value = '12345678901';
+  element('#orderSearch').value = 'jose';
+  element('#cashSearch').value = 'OS20260000';
+  run('renderDashboard(); renderOrders(); renderCash()');
+  assert.match(element('#recentOrdersTable').innerHTML, /José Silva/);
+  assert.doesNotMatch(element('#recentOrdersTable').innerHTML, /Maria/);
+  assert.match(element('#cashTimeline').innerHTML, /Pagamento 0/);
+  assert.doesNotMatch(element('#cashTimeline').innerHTML, /Pagamento 1/);
+  assert.match(element('#ordersGrid').innerHTML, /José Silva/);
+  assert.doesNotMatch(element('#ordersGrid').innerHTML, /Maria/);
+  assert.match(element('#cashTable').innerHTML, /Pagamento 0/);
+  assert.doesNotMatch(element('#cashTable').innerHTML, /Pagamento 1/);
+  assert.equal(element('#cashIncome').textContent, run('money.format(80)'));
+  element('#dashboardSearch').value = 'inexistente';
+  element('#cashSearch').value = 'inexistente';
+  run('renderDashboard(); renderCash()');
+  assert.match(element('#recentOrdersTable').innerHTML, /Nenhuma ordem encontrada/);
+  assert.match(element('#cashTable').innerHTML, /Nenhum movimento encontrado/);
+});
+
+test('botão Pesquisar e envio por Enter usam o formulário; Limpar restaura pesquisa e status', () => {
+  const { run, element } = loadApp();
+  for (const name of ['dashboard', 'order', 'cash']) {
+    const handlers = {};
+    element(`#${name}SearchForm`).addEventListener = (event, handler) => { handlers[event] = handler; };
+    element(`#${name}Search`).addEventListener = () => {};
+    run(`globalThis.searchRenderCount = 0;
+      bindSearchForm('${name}SearchForm', els.${name === 'order' ? 'orderSearch' : name + 'Search'}, () => searchRenderCount++);`);
+    element(`#${name}Search`).value = 'Cliente';
+    element('#statusFilter').value = 'Entrada';
+    let prevented = false;
+    handlers.submit({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(run('searchRenderCount'), 1);
+    handlers.reset({ preventDefault() {} });
+    assert.equal(element(`#${name}Search`).value, '');
+    assert.equal(run('searchRenderCount'), 2);
+    if (name === 'order') assert.equal(element('#statusFilter').value, '');
+  }
+});
