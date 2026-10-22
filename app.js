@@ -50,6 +50,9 @@ const els = {
   cashClientName: document.querySelector("#cashClientName"),
   cashClientCpfLabel: document.querySelector("#cashClientCpfLabel"),
   cashClientCpf: document.querySelector("#cashClientCpf"),
+  cashClientDetails: document.querySelector("#cashClientDetails"),
+  cashClientPhone: document.querySelector("#cashClientPhone"),
+  cashClientAddress: document.querySelector("#cashClientAddress"),
   cashMethod: document.querySelector("#cashMethod"),
   cashPaymentMode: document.querySelector("#cashPaymentMode"),
   cashInstallments: document.querySelector("#cashInstallments"),
@@ -261,15 +264,21 @@ function syncCashContext() {
   updateCashProfit();
 
   els.cashOrderLabel.classList.toggle("visible", isMaintenance);
+  els.cashOrderSelect.required = isMaintenance;
   els.cashClientLabel.classList.toggle("hidden-field", isExpense);
   els.cashClientLabel.classList.toggle("visible", !isExpense);
-  els.cashClientCpfLabel.classList.toggle("hidden-field", !isMaintenance);
-  els.cashClientCpfLabel.classList.toggle("visible", isMaintenance);
+  els.cashClientCpfLabel.classList.toggle("hidden-field", isExpense);
+  els.cashClientCpfLabel.classList.toggle("visible", !isExpense);
+  els.cashClientDetails.classList.toggle("hidden-field", isExpense);
+
+  if (!isMaintenance) els.cashOrderSelect.value = "";
 
   if (isExpense) {
     els.cashClientName.value = "";
     els.cashClientCpf.value = "";
     els.cashOrderSelect.value = "";
+    els.cashClientPhone.value = "";
+    els.cashClientAddress.value = "";
   }
 }
 
@@ -279,12 +288,22 @@ function updateCashProfit() {
 
 function fillCashFromOrder() {
   const order = state.orders.find((item) => item.id === els.cashOrderSelect.value);
-  if (!order) return;
+  if (!order) {
+    els.cashDescription.value = "";
+    els.cashAmount.value = "";
+    els.cashCost.value = "0";
+    updateCashProfit();
+    return;
+  }
 
-  const balance = orderBalance(order);
+  const balance = orderBalance(order, editingCashId);
+  const client = state.clients.find((item) => normalizeCpf(item.cpf) === normalizeCpf(order.clientCpf) && normalizeCpf(item.cpf));
   els.cashClientName.value = order.clientName;
-  els.cashClientCpf.value = order.clientCpf || els.cashClientCpf.value || "";
-  els.cashDescription.value = `Pagamento ${order.code} - ${order.clientName} - ${order.deviceType} ${order.deviceModel}`;
+  els.cashClientCpf.value = order.clientCpf || "";
+  els.cashClientPhone.value = order.clientPhone || client?.phone || "";
+  els.cashClientAddress.value = order.clientAddress || client?.address || "";
+  const service = [order.diagnosis, ...order.items.map((item) => item.description)].filter(Boolean).join("; ");
+  els.cashDescription.value = `Pagamento ${order.code} - ${service || [order.deviceType, order.deviceModel].filter(Boolean).join(" ")}`;
   els.cashAmount.value = balance.toFixed(2);
   const recordedCost = state.cash
     .filter((entry) => entry.orderId === order.id && entry.id !== editingCashId)
@@ -294,15 +313,25 @@ function fillCashFromOrder() {
 }
 
 function handleCashClientCpfLookup() {
-  if (els.cashCategory.value !== "Manutencao/OS") return;
-  const cpf = (els.cashClientCpf.value || "").trim();
-  if (!cpf) return;
+  const cpf = normalizeCpf(els.cashClientCpf.value);
+  const selectedOrder = state.orders.find((item) => item.id === els.cashOrderSelect.value);
+  if (selectedOrder && normalizeCpf(selectedOrder.clientCpf) !== cpf) {
+    els.cashOrderSelect.value = "";
+    fillCashFromOrder();
+  }
+  const client = cpf.length === 11 ? state.clients.find((item) => normalizeCpf(item.cpf) === cpf) : null;
+  els.cashClientName.value = client?.name || "";
+  els.cashClientPhone.value = client?.phone || "";
+  els.cashClientAddress.value = client?.address || "";
+  renderCashOrderOptions();
+  if (els.cashCategory.value !== "Manutencao/OS" || cpf.length !== 11) return;
+  const orders = state.orders.filter((item) => normalizeCpf(item.clientCpf) === cpf && item.status !== "Cancelado" && orderBalance(item, editingCashId) > 0);
+  if (orders.length === 1 && !els.cashOrderSelect.value) els.cashOrderSelect.value = orders[0].id;
+  if (els.cashOrderSelect.value) fillCashFromOrder();
+}
 
-  const order = state.orders.find((item) => normalize(item.clientCpf || "") === normalize(cpf));
-  if (!order) return;
-
-  els.cashOrderSelect.value = order.id;
-  fillCashFromOrder();
+function normalizeCpf(value) {
+  return String(value || "").replace(/\D/g, "");
 }
 
 function syncCreditFields() {
@@ -404,7 +433,7 @@ function render() {
 }
 
 function renderDashboard() {
-  const openOrders = state.orders.filter((order) => !["Finalizado", "Cancelado"].includes(order.status));
+  const openOrders = state.orders.filter((order) => !["Finalizado", "Finalizado e retirado", "Cancelado"].includes(order.status));
   const waitingOrders = state.orders.filter((order) => order.status === "Aguardando retirada");
   const today = toDateInput(new Date());
   const todayIncome = state.cash
@@ -549,6 +578,9 @@ function openCashEditor(item) {
   els.cashDate.value = item.date || toDateInput(new Date());
   els.cashClientName.value = item.clientName || "";
   els.cashClientCpf.value = item.clientCpf || "";
+  els.cashClientPhone.value = item.clientPhone || "";
+  els.cashClientAddress.value = item.clientAddress || "";
+  renderCashOrderOptions();
   els.cashOrderSelect.value = item.orderId || "";
   els.cashPaymentMode.value = item.paymentMode || "avista";
   els.cashInstallments.value = String(item.installments || 1);
@@ -582,7 +614,7 @@ function renderHistoryTables() {
 
   els.ordersHistoryTable.innerHTML = orders.length
     ? orders.map((order) => {
-        const balance = Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0);
+        const balance = orderBalance(order);
         return `
           <tr>
             <td>${escapeHtml(order.code)}</td>
@@ -630,7 +662,9 @@ function handleCashHistoryTableClick(event) {
 
 function renderCashOrderOptions() {
   const currentValue = els.cashOrderSelect.value;
+  const cpf = normalizeCpf(els.cashClientCpf.value);
   const options = [...state.orders]
+    .filter((order) => cpf.length !== 11 || normalizeCpf(order.clientCpf) === cpf || order.id === currentValue)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .map((order) => {
       const balance = orderBalance(order);
@@ -900,6 +934,7 @@ async function saveOrderFromForm(event) {
   const previousOrder = state.orders.find((item) => item.id === editingOrderId);
   const previousStatus = previousOrder?.status || "";
   const order = {
+    ...previousOrder,
     id: previousOrder?.id || crypto.randomUUID(),
     code: previousOrder?.code || nextOrderCode(),
     createdAt: previousOrder?.createdAt || now.toISOString(),
@@ -935,6 +970,7 @@ async function saveOrderFromForm(event) {
     state.orders.push(order);
   }
 
+  if (state.cash.some((item) => item.orderId === order.id)) syncOrderPaymentStatus(order);
   if (await persist() === false) return;
   await notifyOrderStatusChange(order, previousStatus);
   els.orderDialog.close();
@@ -1029,6 +1065,7 @@ function orderStatusMessage(order) {
     "Aguardando peca": "Sua ordem de servico esta aguardando peca.",
     "Aguardando retirada": "Seu aparelho esta aguardando retirada.",
     Finalizado: "Seu conserto foi finalizado.",
+    "Finalizado e retirado": "Seu conserto foi finalizado, o pagamento foi recebido e o aparelho foi retirado.",
     Cancelado: "O conserto foi cancelado."
   };
   const device = [order.deviceType, order.deviceModel].filter(Boolean).join(" ");
@@ -1123,7 +1160,7 @@ function buildReceiptHtml(order) {
     </table>
     <p class="receipt-total">TOTAL ${money.format(orderTotal(order))}</p>
     <p class="receipt-total">SINAL ${money.format(Number(order.depositAmount || 0))}</p>
-    <p class="receipt-total">SALDO ${money.format(Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0))}</p>
+    <p class="receipt-total">SALDO ${money.format(orderBalance(order))}</p>
     <div class="receipt-line"></div>
     <p><span class="receipt-label">Garantia:</span> ${warrantyLabel(order)}</p>
     <p><span class="receipt-label">Retirada:</span> ate ${order.pickupDays ?? 90} dias apos aviso.</p>
@@ -1167,6 +1204,12 @@ async function saveCashMovement(event) {
   event.preventDefault();
   syncCashContext();
   if (!els.cashForm.reportValidity()) return;
+  const order = state.orders.find((item) => item.id === els.cashOrderSelect.value);
+  if (els.cashCategory.value === "Manutencao/OS" && (!order || order.status === "Cancelado")) {
+    alert("Selecione uma ordem de serviço válida para registrar o pagamento.");
+    return;
+  }
+  const previousMovement = state.cash.find((item) => item.id === editingCashId);
   const payload = {
     id: editingCashId || crypto.randomUUID(),
     type: els.cashType.value,
@@ -1174,6 +1217,8 @@ async function saveCashMovement(event) {
     orderId: els.cashCategory.value === "Manutencao/OS" ? els.cashOrderSelect.value : "",
     clientName: els.cashClientName.value.trim(),
     clientCpf: els.cashClientCpf.value.trim(),
+    clientPhone: els.cashClientPhone.value.trim(),
+    clientAddress: els.cashClientAddress.value.trim(),
     method: els.cashMethod.value,
     paymentMode: els.cashMethod.value === "Cartao credito" ? els.cashPaymentMode.value : "avista",
     installments: els.cashMethod.value === "Cartao credito" && els.cashPaymentMode.value === "parcelado"
@@ -1190,6 +1235,11 @@ async function saveCashMovement(event) {
     state.cash = state.cash.map((item) => item.id === editingCashId ? payload : item);
   } else {
     state.cash.push(payload);
+  }
+
+  for (const orderId of new Set([previousMovement?.orderId, payload.orderId])) {
+    const linkedOrder = state.orders.find((item) => item.id === orderId);
+    if (linkedOrder) syncOrderPaymentStatus(linkedOrder);
   }
 
   if (await persist() === false) return;
@@ -1256,7 +1306,7 @@ function exportHistoryExcel(type) {
         Previsao: order.dueDate || "-",
         Total: orderTotal(order),
         Sinal: Number(order.depositAmount || 0),
-        Saldo: Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0),
+        Saldo: orderBalance(order),
         Telefone: order.clientPhone || "-",
         CPF: order.clientCpf || "-"
       }));
@@ -1331,8 +1381,29 @@ function orderTotal(order) {
   return order.items.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
 }
 
-function orderBalance(order) {
-  return Math.max(orderTotal(order) - Number(order.depositAmount || 0), 0);
+function orderBalance(order, excludedCashId = null) {
+  const payments = state.cash
+    .filter((item) => item.orderId === order.id && item.id !== excludedCashId)
+    .reduce((sum, item) => sum + (item.type === "entrada" ? 1 : -1) * Number(item.amount || 0), 0);
+  return Math.max(Math.round((orderTotal(order) - Number(order.depositAmount || 0) - payments) * 100) / 100, 0);
+}
+
+function syncOrderPaymentStatus(order) {
+  if (order.status === "Cancelado") return;
+  const hasPayment = state.cash.some((item) => item.orderId === order.id && item.type === "entrada" && Number(item.amount) > 0);
+  if (hasPayment && orderBalance(order) === 0) {
+    if (order.status !== "Finalizado e retirado") {
+      order.statusBeforePayment = order.status;
+      order.status = "Finalizado e retirado";
+      order.paymentCompletedAt = new Date().toISOString();
+      order.updatedAt = order.paymentCompletedAt;
+    }
+  } else if (order.paymentCompletedAt) {
+    if (order.status === "Finalizado e retirado") order.status = order.statusBeforePayment || "Aguardando retirada";
+    delete order.statusBeforePayment;
+    delete order.paymentCompletedAt;
+    order.updatedAt = new Date().toISOString();
+  }
 }
 
 function orderCost(order) {
@@ -1456,7 +1527,7 @@ function shortText(value, maxLength) {
 }
 
 function statusClass(status) {
-  if (["Finalizado"].includes(status)) return "ok";
+  if (["Finalizado", "Finalizado e retirado"].includes(status)) return "ok";
   if (["Cancelado"].includes(status)) return "danger";
   if (["Aguardando peca", "Aguardando retirada"].includes(status)) return "warn";
   return "info";

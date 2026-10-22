@@ -83,7 +83,7 @@ test('salvar e editar mantém custo e recalcula lucro sem duplicar movimento', a
   const { run, element } = loadApp();
   run('persist = () => {}; resetCashEditor = () => {}; render = () => {}');
   element('#cashType').value = 'entrada';
-  element('#cashCategory').value = 'Manutencao/OS';
+  element('#cashCategory').value = 'Venda';
   element('#cashAmount').value = '380';
   element('#cashCost').value = '120';
   element('#cashDescription').value = 'Troca da tela Samsung A80';
@@ -201,4 +201,112 @@ test('restauração de backup recupera clientes e produtos junto com ordens e ca
   await run('importDone');
   assert.equal(run('state.clients[0].name'), 'Cliente restaurado');
   assert.equal(run('state.products[0].cost'), 80);
+});
+
+test('CPF no caixa busca cadastro com ou sem pontuação, inclusive em vendas', () => {
+  const { run, element } = loadApp();
+  run(`state.clients = [{name: 'Cliente teste', cpf: '123.456.789-01', phone: '11999990000', address: 'Rua A'}]`);
+  element('#cashCategory').value = 'Venda';
+  element('#cashClientCpf').value = '12345678901';
+  run('handleCashClientCpfLookup()');
+  assert.equal(element('#cashClientName').value, 'Cliente teste');
+  assert.equal(element('#cashClientPhone').value, '11999990000');
+  assert.equal(element('#cashClientAddress').value, 'Rua A');
+  element('#cashClientCpf').value = '00000000000';
+  run('handleCashClientCpfLookup()');
+  assert.equal(element('#cashClientName').value, '');
+});
+
+function prepareOrderPayment() {
+  const app = loadApp();
+  app.run(`state.orders = [{id: 'os1', code: 'OS-1', clientName: 'Cliente', clientCpf: '12345678901',
+    clientPhone: '11999990000', clientAddress: 'Rua A', status: 'Aguardando retirada', updatedAt: '2026-10-22',
+    diagnosis: 'Troca de tela realizada', depositAmount: 50,
+    items: [{description: 'Tela', qty: 1, price: 380, cost: 120}]}];
+    globalThis.actualPersist = persist;
+    persist = async () => true; resetCashEditor = () => {}; render = () => {};`);
+  app.element('#cashType').value = 'entrada';
+  app.element('#cashCategory').value = 'Manutencao/OS';
+  app.element('#cashOrderSelect').value = 'os1';
+  app.run('fillCashFromOrder()');
+  return app;
+}
+
+test('OS preenche serviço, cliente e saldo descontando sinal e pagamentos anteriores', () => {
+  const { run, element } = prepareOrderPayment();
+  assert.match(element('#cashDescription').value, /Troca de tela realizada; Tela/);
+  assert.equal(element('#cashClientCpf').value, '12345678901');
+  assert.equal(element('#cashClientPhone').value, '11999990000');
+  assert.equal(element('#cashAmount').value, '330.00');
+  run(`state.cash = [{id: 'p1', orderId: 'os1', type: 'entrada', amount: 100}]; fillCashFromOrder()`);
+  assert.equal(element('#cashAmount').value, '230.00');
+  run(`editingCashId = 'p1'; fillCashFromOrder()`);
+  assert.equal(element('#cashAmount').value, '330.00');
+});
+
+test('CPF seleciona a única OS pendente e exige escolha quando há várias', () => {
+  const { run, element } = prepareOrderPayment();
+  element('#cashOrderSelect').value = '';
+  element('#cashClientCpf').value = '123.456.789-01';
+  run('handleCashClientCpfLookup()');
+  assert.equal(element('#cashOrderSelect').value, 'os1');
+  run(`state.orders.push({...state.orders[0], id: 'os2', code: 'OS-2'});`);
+  element('#cashOrderSelect').value = '';
+  run('handleCashClientCpfLookup()');
+  assert.equal(element('#cashOrderSelect').value, '');
+  element('#cashOrderSelect').value = 'os1';
+  element('#cashClientCpf').value = '00000000000';
+  run('handleCashClientCpfLookup()');
+  assert.equal(element('#cashOrderSelect').value, '');
+  assert.equal(element('#cashAmount').value, '');
+});
+
+test('pagamento parcial mantém OS aberta; quitação finaliza e edição menor reabre', async () => {
+  const { run, element } = prepareOrderPayment();
+  element('#cashAmount').value = '100';
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.orders[0].status'), 'Aguardando retirada');
+  assert.equal(run('orderBalance(state.orders[0])'), 230);
+  run('editingCashId = state.cash[0].id');
+  element('#cashAmount').value = '330';
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.orders[0].status'), 'Finalizado e retirado');
+  assert.equal(run('orderBalance(state.orders[0])'), 0);
+  assert.equal(run('state.cash.length'), 1);
+  element('#cashAmount').value = '200';
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.orders[0].status'), 'Aguardando retirada');
+  assert.equal(run('orderBalance(state.orders[0])'), 130);
+});
+
+test('pagamentos acumulados quitam OS sem contar novamente o movimento editado', async () => {
+  const { run, element } = prepareOrderPayment();
+  run(`state.cash = [{id: 'anterior', orderId: 'os1', type: 'entrada', amount: 100, cost: 120}]; fillCashFromOrder()`);
+  assert.equal(element('#cashAmount').value, '230.00');
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.orders[0].status'), 'Finalizado e retirado');
+  assert.equal(run('state.cash.length'), 2);
+  assert.equal(run('cashTotals().costs'), 120);
+});
+
+test('manutenção exige OS válida e não aceita ordem cancelada', async () => {
+  const { run, element } = prepareOrderPayment();
+  run('globalThis.alert = () => {}');
+  element('#cashOrderSelect').value = '';
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.cash.length'), 0);
+  element('#cashOrderSelect').value = 'os1';
+  run(`state.orders[0].status = 'Cancelado'`);
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.cash.length'), 0);
+});
+
+test('falha ao salvar pagamento restaura também status e saldo da OS', async () => {
+  const { run } = prepareOrderPayment();
+  run(`savedStateJson = JSON.stringify(state); persist = actualPersist;
+    globalThis.fetch = async () => ({ok: false}); globalThis.alert = () => {};`);
+  await run('saveCashMovement({preventDefault() {}})');
+  assert.equal(run('state.cash.length'), 0);
+  assert.equal(run('state.orders[0].status'), 'Aguardando retirada');
+  assert.equal(run('orderBalance(state.orders[0])'), 330);
 });
