@@ -8,14 +8,12 @@ function createAuth({ username = process.env.LOGIN_USER, password = process.env.
   const configured = typeof username === 'string' && username.trim() && typeof password === 'string' && password.length >= 12;
   const salt = crypto.randomBytes(16);
   const passwordHash = configured ? scrypt(password, salt, 64) : null;
-  const sessions = new Map();
+  const sessions = new Set();
   const attempts = new Map();
-  const lifetime = 4 * 60 * 60 * 1000;
   const attemptWindow = 15 * 60 * 1000;
   const tokenKey = (token) => digest(token).toString('hex');
 
   function prune() {
-    for (const [key, expires] of sessions) if (expires <= now()) sessions.delete(key);
     for (const [ip, entry] of attempts) if (entry.expires <= now()) attempts.delete(ip);
   }
 
@@ -48,9 +46,9 @@ function createAuth({ username = process.env.LOGIN_USER, password = process.env.
       const validUser = crypto.timingSafeEqual(digest(suppliedUser.trim()), digest(username.trim()));
       if (!validPassword || !validUser) return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
       attempts.delete(ip);
-      if (sessions.size >= 1000) sessions.delete(sessions.keys().next().value);
+      if (sessions.size >= 1000) sessions.delete(sessions.values().next().value);
       const token = crypto.randomBytes(32).toString('base64url');
-      sessions.set(tokenKey(token), now() + lifetime);
+      sessions.add(tokenKey(token));
       return res.json({ token });
     } catch {
       return res.status(503).json({ error: 'Não foi possível entrar. Tente novamente.' });
@@ -61,8 +59,7 @@ function createAuth({ username = process.env.LOGIN_USER, password = process.env.
     res.set('Cache-Control', 'no-store');
     const token = bearer(req);
     const key = token && tokenKey(token);
-    if (!key || !sessions.has(key) || sessions.get(key) <= now()) {
-      if (key) sessions.delete(key);
+    if (!key || !sessions.has(key)) {
       return res.status(401).json({ error: 'Entre com usuário e senha para acessar o sistema.' });
     }
     next();

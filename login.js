@@ -7,6 +7,16 @@
   const submit = document.querySelector('#loginButton');
   let token = null;
   let onLogin = null;
+  const sessionKey = 'ccn-login-token';
+
+  // Restore only a refresh of this tab; a new navigation starts at the login screen.
+  try {
+    const navigation = window.performance?.getEntriesByType?.('navigation')?.[0];
+    if (navigation?.type === 'reload') token = sessionStorage.getItem(sessionKey);
+    else sessionStorage.removeItem(sessionKey);
+  } catch {
+    // Login remains available when this browser blocks session storage.
+  }
 
   function revoke(previousToken) {
     if (!previousToken) return Promise.resolve();
@@ -18,6 +28,7 @@
   function lock() {
     const previous = token;
     token = null;
+    try { sessionStorage.removeItem(sessionKey); } catch {}
     app.hidden = true;
     screen.hidden = false;
     form.reset();
@@ -65,6 +76,7 @@
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Não foi possível entrar.');
       token = result.token;
+      try { sessionStorage.setItem(sessionKey, token); } catch {}
       if (!onLogin) throw new Error('A página ainda está carregando. Tente novamente.');
       await onLogin();
     } catch (error) {
@@ -79,8 +91,7 @@
     }
   });
   document.querySelector('#logoutButton').addEventListener('click', () => window.ccnAuth.logout());
-  window.addEventListener('pagehide', () => { void revoke(lock()); });
   window.addEventListener('pageshow', (event) => {
-    if (event.persisted) { lock(); window.location.reload(); }
+    if (event.persisted) window.location.reload();
   });
 })();

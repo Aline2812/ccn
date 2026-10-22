@@ -61,7 +61,7 @@ test('sem credenciais configuradas ou senha curta o acesso fica bloqueado', asyn
   }
 });
 
-test('sessão expira após quatro horas e nova abertura sem token exige login', async t => {
+test('sessão permanece válida durante o dia e acesso sem token exige login', async t => {
   const f = await fixture(t);
   const { token } = await (await f.login()).json();
   const headers = { Authorization: `Bearer ${token}` };
@@ -69,7 +69,9 @@ test('sessão expira após quatro horas e nova abertura sem token exige login', 
   assert.equal((await f.request(`/private?token=${token}`)).status, 401);
   assert.equal((await f.request('/private', { headers: { Cookie: `session=${token}` } })).status, 401);
   assert.equal((await f.request('/private', { headers })).status, 200);
-  f.advance(4 * 60 * 60 * 1000);
+  f.advance(24 * 60 * 60 * 1000);
+  assert.equal((await f.request('/private', { headers })).status, 200);
+  await f.request('/logout', { method: 'POST', headers });
   assert.equal((await f.request('/private', { headers })).status, 401);
 });
 

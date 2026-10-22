@@ -8,9 +8,13 @@ No Render, em **Environment → Edit**, configure:
 Não coloque essas credenciais no GitHub. Salve as variáveis antes de publicar a versão com login.
 Sem as duas variáveis válidas, o acesso aos dados permanece bloqueado. Não há senha padrão.
 
-O login vale somente para a página aberta. Recarregar, fechar ou abrir outra aba exige uma nova
-autenticação. O botão **Sair** revoga a sessão; ela também expira após quatro horas. Nenhuma
-credencial ou sessão é gravada em cookies, `localStorage` ou `sessionStorage` pelo sistema.
+O login é mantido ao atualizar a mesma aba, inclusive depois de um dia de uso. Não há mais
+expiração automática após quatro horas. Fechar a aba e abrir o endereço novamente exige login,
+assim como abrir o endereço em uma nova aba. O botão **Sair** revoga a sessão imediatamente.
+Somente o token de acesso é guardado no `sessionStorage` da aba, e ele só é recuperado quando
+o navegador identifica a navegação como uma atualização. Usuário e senha não são armazenados
+pelo sistema. O token não é gravado em cookies nem em `localStorage`.
+Reiniciar o servidor ou publicar uma versão encerra as sessões que estavam na memória dele.
 O preenchimento de senhas pelo navegador depende das preferências do próprio navegador.
 
 Para executar localmente no PowerShell, configure `LOGIN_USER` e `LOGIN_PASSWORD` nas variáveis
