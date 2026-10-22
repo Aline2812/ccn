@@ -290,6 +290,11 @@
         </section>
 
         <section class="view" id="clientsView">
+          <form id="clientSearchForm" class="search-toolbar" role="search" aria-label="Pesquisar clientes">
+            <input id="clientSearch" type="search" aria-label="Pesquisar clientes por CPF, OS ou nome" placeholder="CPF, número da OS ou nome do cliente">
+            <button class="primary-button" type="submit">Pesquisar</button>
+            <button class="ghost-button" type="reset">Limpar</button>
+          </form>
           <section class="panel settings-panel">
             <div class="panel-heading">
               <h2>CADASTRO DE CLIENTES</h2>
@@ -340,6 +345,11 @@
         </section>
 
         <section class="view" id="productsView">
+          <form id="productSearchForm" class="search-toolbar" role="search" aria-label="Pesquisar produtos">
+            <input id="productSearch" type="search" aria-label="Pesquisar produtos por código, nome, categoria ou marca" placeholder="Código, nome, categoria ou marca do produto">
+            <button class="primary-button" type="submit">Pesquisar</button>
+            <button class="ghost-button" type="reset">Limpar</button>
+          </form>
           <section class="panel settings-panel">
             <div class="panel-heading">
               <h2>CADASTRO DE PRODUTOS</h2>
@@ -662,7 +672,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="login.js?v=login-1"></script>
-    <script src="app.js?v=search-1"></script>
+    <script src="app.js?v=search-2"></script>
     <script src="dropdowns.js?v=dropdown-below-2"></script>
   </body>
 </html>

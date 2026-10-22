@@ -42,6 +42,8 @@ const els = {
   orderSearch: document.querySelector("#orderSearch"),
   dashboardSearch: document.querySelector("#dashboardSearch"),
   cashSearch: document.querySelector("#cashSearch"),
+  clientSearch: document.querySelector("#clientSearch"),
+  productSearch: document.querySelector("#productSearch"),
   statusFilter: document.querySelector("#statusFilter"),
   cashForm: document.querySelector("#cashForm"),
   cashType: document.querySelector("#cashType"),
@@ -194,6 +196,8 @@ function bindEvents() {
   bindSearchForm("dashboardSearchForm", els.dashboardSearch, renderDashboard);
   bindSearchForm("orderSearchForm", els.orderSearch, renderOrders);
   bindSearchForm("cashSearchForm", els.cashSearch, renderCash);
+  bindSearchForm("clientSearchForm", els.clientSearch, renderClientCatalog);
+  bindSearchForm("productSearchForm", els.productSearch, renderProductCatalog);
   els.statusFilter.addEventListener("change", renderOrders);
   els.cashType.addEventListener("change", syncCashCategory);
   els.cashAmount.addEventListener("input", updateCashProfit);
@@ -715,8 +719,18 @@ function renderCashOrderOptions() {
 
 function renderClientCatalog() {
   if (!els.clientList) return;
-  els.clientList.innerHTML = state.clients.length
-    ? state.clients.map((client) => `
+  const query = els.clientSearch.value.trim();
+  const filtered = state.clients.filter((client) =>
+    matchesRecordSearch(query, [client.name, client.cpf, client.phone, client.messagePhone, client.address], client.cpf, "")
+    || state.orders.some((order) => {
+      const clientCpf = normalizeCpf(client.cpf);
+      const orderCpf = normalizeCpf(order.clientCpf);
+      const sameClient = clientCpf && orderCpf ? clientCpf === orderCpf
+        : Boolean(client.name && order.clientName && normalize(client.name.trim()) === normalize(order.clientName.trim()));
+      return sameClient && matchesRecordSearch(query, [order.code], "", order.code);
+    }));
+  els.clientList.innerHTML = filtered.length
+    ? filtered.map((client) => `
       <tr>
         <td>${escapeHtml(client.name || "-")}</td>
         <td>${escapeHtml(client.phone || "-")}</td>
@@ -724,13 +738,16 @@ function renderClientCatalog() {
         <td>${escapeHtml(client.address || "-")}</td>
       </tr>
     `).join("")
-    : `<tr><td colspan="4">Nenhum cliente cadastrado.</td></tr>`;
+    : `<tr><td colspan="4">${query ? "Nenhum cliente encontrado para esta pesquisa." : "Nenhum cliente cadastrado."}</td></tr>`;
 }
 
 function renderProductCatalog() {
   if (!els.productList) return;
-  els.productList.innerHTML = state.products.length
-    ? state.products.map((product) => `
+  const query = els.productSearch.value.trim();
+  const filtered = state.products.filter((product) => matchesRecordSearch(query,
+    [product.code, product.name, product.category, product.brand], "", product.code));
+  els.productList.innerHTML = filtered.length
+    ? filtered.map((product) => `
       <tr>
         <td>${escapeHtml(product.code || "-")}</td>
         <td>${escapeHtml(product.name || "-")}</td>
@@ -741,7 +758,7 @@ function renderProductCatalog() {
         <td>${escapeHtml(product.stock || "0")}</td>
       </tr>
     `).join("")
-    : `<tr><td colspan="7">Nenhum produto cadastrado.</td></tr>`;
+    : `<tr><td colspan="7">${query ? "Nenhum produto encontrado para esta pesquisa." : "Nenhum produto cadastrado."}</td></tr>`;
 }
 
 function syncAutocompleteLists() {

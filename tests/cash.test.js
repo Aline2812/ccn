@@ -355,7 +355,7 @@ test('pesquisa filtra as três telas e encontra registros anteriores aos recente
 
 test('botão Pesquisar e envio por Enter usam o formulário; Limpar restaura pesquisa e status', () => {
   const { run, element } = loadApp();
-  for (const name of ['dashboard', 'order', 'cash']) {
+  for (const name of ['dashboard', 'order', 'cash', 'client', 'product']) {
     const handlers = {};
     element(`#${name}SearchForm`).addEventListener = (event, handler) => { handlers[event] = handler; };
     element(`#${name}Search`).addEventListener = () => {};
@@ -372,4 +372,47 @@ test('botão Pesquisar e envio por Enter usam o formulário; Limpar restaura pes
     assert.equal(run('searchRenderCount'), 2);
     if (name === 'order') assert.equal(element('#statusFilter').value, '');
   }
+});
+
+test('cadastro de clientes pesquisa nome, CPF e OS vinculada sem misturar CPFs diferentes', () => {
+  const { run, element } = loadApp();
+  run(`state.clients = [
+    {name: 'José Silva', cpf: '123.456.789-01'}, {name: 'Maria', cpf: '98765432100'},
+    {name: 'José Silva', cpf: '11111111111'}];
+    state.orders = [{code: 'OS-2026-0001', clientName: 'José Silva', clientCpf: '12345678901'}];`);
+  for (const query of ['12345678901', 'OS20260001']) {
+    element('#clientSearch').value = query;
+    run('renderClientCatalog()');
+    assert.match(element('#clientList').innerHTML, /123\.456\.789-01/);
+    assert.doesNotMatch(element('#clientList').innerHTML, /Maria|11111111111/);
+  }
+  element('#clientSearch').value = 'JOSE';
+  run('renderClientCatalog()');
+  assert.match(element('#clientList').innerHTML, /José Silva/);
+  assert.doesNotMatch(element('#clientList').innerHTML, /Maria/);
+  element('#clientSearch').value = '';
+  run('renderClientCatalog()');
+  assert.match(element('#clientList').innerHTML, /Maria/);
+  element('#clientSearch').value = 'inexistente';
+  run('renderClientCatalog()');
+  assert.match(element('#clientList').innerHTML, /Nenhum cliente encontrado/);
+});
+
+test('cadastro de produtos pesquisa código, nome, categoria e marca e limpa o filtro', () => {
+  const { run, element } = loadApp();
+  run(`state.products = [{code: 'TEL-A80', name: 'Tela A80', category: 'Peças', brand: 'Samsung'},
+    {code: 'CAB-01', name: 'Cabo USB', category: 'Acessórios', brand: 'Outra'}];`);
+  for (const query of ['tela80', 'TELA A80', 'pecas', 'SAMSUNG']) {
+    element('#productSearch').value = query;
+    run('renderProductCatalog()');
+    assert.match(element('#productList').innerHTML, /Tela A80/);
+    assert.doesNotMatch(element('#productList').innerHTML, /Cabo USB/);
+  }
+  element('#productSearch').value = '';
+  run('renderProductCatalog()');
+  assert.match(element('#productList').innerHTML, /Cabo USB/);
+  element('#productSearch').value = 'inexistente';
+  run('renderProductCatalog()');
+  assert.match(element('#productList').innerHTML, /Nenhum produto encontrado/);
+  assert.equal(run('state.products.length'), 2);
 });
